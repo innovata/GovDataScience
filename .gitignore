@@ -127,6 +127,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+govDataScienceEnv_py39_64bit/
+
 
 # Spyder project settings
 .spyderproject
