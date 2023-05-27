@@ -17,41 +17,89 @@ from govdatascience.dataengine import datamodels
 
 """국토교통부_아파트매매 실거래 상세 자료"""
 @ftracer
-def collectAptRealTrades():
+def collectAptTradeRealContracts():
     f = {'$or': [
         {'개수': None},
         {'개수': 0},
     ]}
+    p = {'_id': 0}
     model1 = datamodels.AptRealTradesCollectChecklist()
-    data = model1.load(f)
+    # 신청가능 트래픽 개발계정 : 1,000 / 운영계정 : 활용사례 등록시 신청하면 트래픽 증가 가능
+    data = model1.load(f, p, sort=[('검색연월',-1), ('지역코드',1)], limit=1000)
     df = pd.DataFrame(data)
-    locationCodes = list(df['지역코드'])
-    tradeMonths = list(df['연월'])
+    print(df)
 
     def __collect__(locationCode, tradeMonth):
-        response = openapi.getRTMSDataSvcAptTradeDev(locationCode, tradeMonth)
-        print(response.text)
-        root = ET.fromstring(response.text)
-        cnt = root.find('body/totalCount').text
-        print({'cnt': cnt})
-        if int(cnt) == 0: 
-            logger.warning('itemsLen is 0')
-        else: 
-            items = root.find('body/items')
-            ElementTree(items).write('output.xml', encoding='UTF-8')
-            df = pd.read_xml('output.xml')
-            print(df)
+        d = openapi.getRTMSDataSvcAptTradeDev(locationCode, tradeMonth)
+        if d is None:
+            return False 
+        else:
+            """다운로드 개수 업데이트"""
+            f = {'지역코드': locationCode, '검색연월': tradeMonth}
+            data = d.pop('data')
+            d.update(f)
+            model1.update_one(f, {'$set': d})                    
+            
+            """DB저장"""
+            df = pd.DataFrame(data)
             if len(df) > 0:
-                df['연월'] = tradeMonth
+                df['검색연월'] = tradeMonth
                 model2 = datamodels.ApartmentRealTrade()
                 model2.insert_many(df.to_dict('records'))
+            return True
 
-    i = 0
-    for tradeMonth, locationCode in itertools.product(tradeMonths, locationCodes):
-        print([locationCode, tradeMonth])
-        i+=1
-        # __collect__(locationCode, tradeMonth)
-    print(i)
+    _len = len(data)
+    for i, d in enumerate(data, start=1):
+        result = __collect__(d['지역코드'], d['검색연월'])
+        # break
+        if result: 
+            print('-'*100, f"{i}/{_len}", '완료') 
+        else: 
+            break
 
+
+
+"""국토교통부_아파트 전월세 자료"""
+@ftracer
+def collectAptRents():
+    f = {'$or': [
+        {'numOfRows': None},
+        {'numOfRows': 0},
+    ]}
+    p = {'_id': 0}
+    model1 = datamodels.AptRentsChecklist()
+    # 신청가능 트래픽 개발계정 : 1,000 / 운영계정 : 활용사례 등록시 신청하면 트래픽 증가 가능
+    data = model1.load(f, p, sort=[('검색연월',-1), ('지역코드',1)], limit=1000)
+    df = pd.DataFrame(data)
+    pretty_title('아파트 전월세 수집대상')
+    print(df)
+
+    def __collect__(locationCode, tradeMonth):
+        d = openapi.getRTMSDataSvcAptRent(locationCode, tradeMonth)
+        if d is None:
+            return False 
+        else:
+            """다운로드 개수 업데이트"""
+            f = {'지역코드': locationCode, '검색연월': tradeMonth}
+            data = d.pop('data')
+            d.update(f)
+            model1.update_one(f, {'$set': d})
+            
+            """DB저장"""
+            df = pd.DataFrame(data)
+            if len(df) > 0:
+                df['검색연월'] = tradeMonth
+                model2 = datamodels.ApartmentRent()
+                model2.insert_many(df.to_dict('records'))
+            return True
+
+    _len = len(data)
+    for i, d in enumerate(data, start=1):
+        result = __collect__(d['지역코드'], d['검색연월'])
+        # break
+        if result: 
+            print('-'*100, f"{i}/{_len}", '완료') 
+        else: 
+            break
 
     
