@@ -4,3 +4,10 @@ ipykernel
 
 
 requests
+lxml
+pandas 
+pymongo
+
+
+ipylib
+
