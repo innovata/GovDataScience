@@ -59,6 +59,7 @@ class Collection(collection.Collection):
             if type == 'dcls': return BaseDataClass(**d)
             elif type == 'dict': return d
     def load(self, f={}, p={}, **kwargs):
+        p.update({'_id':0})
         cursor = self.find(f, p, **kwargs)
         data = list(cursor)
         print({'DataLen': len(data)})

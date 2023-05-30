@@ -13,11 +13,12 @@ import pandas as pd
 
 
 from govdatascience import openapi, realstate
-from govdatascience.dataengine import database, datamodels, metadata
+from govdatascience.dataengine import database, datamodels, metadata, schmodels
+from govdatascience.dataengine.database import db
 
 def reload_all():
     modules =[
-        database, metadata, datamodels,
+        database, metadata, datamodels, schmodels,
         openapi, realstate,
     ]
     for m in modules: reload(m)

@@ -89,7 +89,7 @@ def getRTMSDataSvcAptTradeDev(locationCode='11110', tradeMonth='202305', n_rows=
 
 
 """국토교통부_아파트 전월세 자료"""
-@ftracer
+# @ftracer
 def getRTMSDataSvcAptRent(locationCode='11110', tradeMonth='202305'):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptRent'
     params ={'serviceKey' : DECODE_KEY, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth}
@@ -112,6 +112,17 @@ def getRTMSDataSvcRHTrade(locationCode='11110', tradeMonth='202305'):
 @ftracer
 def getRTMSDataSvcRHRent(locationCode='11110', tradeMonth='202305'):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHRent'
+    params ={'serviceKey' : DECODE_KEY, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
+    response = requests.get(url, params=params)
+
+    return _handle_response(response)
+
+
+
+"""국토교통부_아파트 분양권전매 신고 자료"""
+@ftracer
+def getRTMSDataSvcSilvTrade(locationCode='11110', tradeMonth='202305'):
+    url = 'http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSilvTrade'
     params ={'serviceKey' : DECODE_KEY, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     response = requests.get(url, params=params)
 
