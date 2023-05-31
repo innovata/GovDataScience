@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import os 
+from datetime import datetime
 
 
 import pandas as pd
@@ -358,23 +359,28 @@ class AptTradeRealContract(database.Collection):
             # '지역코드': o.지역코드,
             # '계약연월': None,
             # '계약연월': {'$ne': None},
-            # '아파트': '신답경남',
-            '지역1': {'$regex': '^서울'}
+            # '아파트': {'$regex': '현대2차'},
+            # '지역1': {'$regex': '^서울'}
+            '일련번호': '11560-75',
         }
         print({'필터': f})
         sch = schmodels.RealState()
-        cols = sch.get_cols(column='코드$|번호$')
+        cols = sch.get_cols(column='코드$|번호$|^해제')
+        cols.remove('일련번호')
         pp.pprint(cols)
         p = {c:0 for c in cols}
         data = self.load(f, p, sort=[('년',-1), ('월',-1), ('일',-1)])
+        try:
+            for d in data: d['계약일자'] = d['계약일자'].astimezone()
+        except Exception as e: pass 
         df = pd.DataFrame(data)
         # df = df.drop_duplicates(subset=['지역코드'], keep='first').\
         #         reset_index(drop=True)
         print({'FrameLen': len(df)})
 
         def __groupby01__(df):
-            g = df.groupby('계약연월').count()
-            print(g)
+            g = df.groupby('아파트').count()
+            print(g.sort_values('거래금액', ascending=False))
 
         __groupby01__(df)
         return df
@@ -391,12 +397,8 @@ class AptTradeRealContract(database.Collection):
             # return df 
             self.drop()
             self.insert_many(data)
-    def _manipulate01(self):
-        self.update_many(
-            {},
-            {'$rename': {'검색연월': '계약연월'}}
-        )
-    def _manipulate02(self):
+
+    def assign_newColumns01(self):
         model = LocationCode()
         df = model.target01('서울')
         data = df.to_dict('records')
@@ -410,6 +412,35 @@ class AptTradeRealContract(database.Collection):
                 {'지역코드': locationCode},
                 {'$set': {'지역1': region1, '지역2': region2}}
             )
+    def assign_newColumns02(self):
+
+        """계약일자 컬럼추가"""
+        def __ContractDate__(d, _doc):
+            dt = datetime(d['년'], d['월'], d['일']).astimezone()
+            _doc.update({'계약일자': dt})
+            return _doc
+        """아파트ID 컬럼추가"""
+        def __AptId__(d, _doc):
+            _doc.update({'AptId': d['일련번호'] + '_' + str(d['전용면적'])})
+            return _doc 
+        
+        cursor = self.find(limit=10)
+        doc = {}
+        for d in list(cursor):
+            doc = __ContractDate__(d, doc)
+            doc = __AptId__(d, doc)
+            # print(doc)
+            self.update_one(
+                {'_id': d['_id']},
+                {'$set': doc}
+            )
+    
+    def _manipulate01(self):
+        self.update_many(
+            {},
+            {'$rename': {'검색연월': '계약연월'}}
+        )
+    
 
 
 """국토교통부_아파트 전월세 자료"""
