@@ -43,6 +43,16 @@ class PercentType(FieldType):
     def parse(self, value): return inumber.Percent(value, self.prec).value
 
 
+class IntegerType(FieldType):
+
+    def __init__(self, **kwargs): super().__init__(**kwargs)
+    def parse(self, value): return inumber.iNumber(value).value
+
+
+class StringType(FieldType):
+
+    def __init__(self, **kwargs): super().__init__(**kwargs)
+    def parse(self, value): return str(value)
 
 
 class SchemaModel(database.Collection):
@@ -227,7 +237,14 @@ class SchemaModel(database.Collection):
 
 class RealState(SchemaModel):
 
-    def __init__(self): super().__init__()
+    def __init__(self): 
+        # self.거래금액 = IntegerType()
+        # self.건축년도 = IntegerType()
+        # self.거래유형 = StringType()
+        # self._columns = list(self.__dict__)
+        # print(self.__dict__)
+
+        super().__init__()
     def __create__(self):
         # cols = ['거래금액', '거래유형', '건축년도', '년', '도로명', '도로명건물본번호코드', '도로명건물부번호코드', '도로명시군구코드', '도로명일련번호코드', '도로명지상지하코드', '도로명코드', '법정동', '법정동본번코드', '법정동부번코드', '법정동시군구코드', '법정동읍면동코드', '법정동지번코드', '아파트', '월', '일', '일련번호', '전용면적', '중개사소재지', '지번', '지역코드', '층', '해제사유발생일', '해제여부', '검색연월']
         # cols = list(set(cols))

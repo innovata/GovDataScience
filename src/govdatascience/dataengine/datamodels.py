@@ -348,8 +348,16 @@ class AptTradeRealContract(database.Collection):
     def __init__(self):
         super().__init__(self.__class__.__name__)
     def inspect(self):
-        sch = schmodels.ApartmentRealTrade()
+        sch = schmodels.RealState()
         database.print_colunqval(self, sch.columns)
+    def load_frame(self, f, p, **kwargs):
+        print({'필터': f})
+        data = self.load(f, p, **kwargs)
+        # print({'DataLen': len(data)})
+        try:
+            for d in data: d['계약일자'] = d['계약일자'].astimezone()
+        except Exception as e: pass 
+        return pd.DataFrame(data)
     def view(self):
         # self._manipulate01()
 
@@ -357,23 +365,21 @@ class AptTradeRealContract(database.Collection):
 
         f = {
             # '지역코드': o.지역코드,
+            '지역1': '서울특별시',
+            '지역2': {'$regex': '노원'},
             # '계약연월': None,
             # '계약연월': {'$ne': None},
             # '아파트': {'$regex': '현대2차'},
             # '지역1': {'$regex': '^서울'}
-            '일련번호': '11560-75',
+            # '일련번호': '11560-75',
+            '거래유형': '직거래',
         }
-        print({'필터': f})
         sch = schmodels.RealState()
         cols = sch.get_cols(column='코드$|번호$|^해제')
         cols.remove('일련번호')
-        pp.pprint(cols)
+        
         p = {c:0 for c in cols}
-        data = self.load(f, p, sort=[('년',-1), ('월',-1), ('일',-1)])
-        try:
-            for d in data: d['계약일자'] = d['계약일자'].astimezone()
-        except Exception as e: pass 
-        df = pd.DataFrame(data)
+        df = self.load_frame(f, p, sort=[('년',-1), ('월',-1), ('일',-1)])
         # df = df.drop_duplicates(subset=['지역코드'], keep='first').\
         #         reset_index(drop=True)
         print({'FrameLen': len(df)})
