@@ -497,3 +497,22 @@ class VillaRent(database.Collection):
         df = pd.DataFrame(data)
         print({'FrameLen': len(df)})
         return df 
+
+
+
+
+
+"""한국은행 OpenAPI 서비스 통계 목록"""
+class BOKStatisticTableList(database.Collection):
+
+    def __init__(self): super().__init__(self.__class__.__name__)
+    def view(self):
+        f = {
+            # 'STAT_CODE': {'$regex': '[A-Z0-9]{7}'},
+            'CYCLE': {'$ne': None},
+        }
+        p = {c:0 for c in []}
+        p.update({'_id': 0})
+        data = self.load(f, p)
+        df = pd.DataFrame(data)
+        return df 

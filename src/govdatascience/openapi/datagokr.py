@@ -5,6 +5,7 @@ from xml.dom import minidom
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import ElementTree
 from urllib.parse import urlparse
+from dataclasses import dataclass
 
 
 import requests
@@ -14,21 +15,10 @@ import pandas as pd
 from ipylib.idebug import *
 
 
+from govdatascience.openapi import APIKey
 
 
 
-@ftracer
-def apikey():
-    file = os.path.abspath("C:\\pypjts\\GovDataScience\\authkey.json")
-    with open(file, "r") as f:
-        text = f.read()
-    d = json.loads(text)
-    encodeKey = d['EncodingKey']
-    decodeKey = d['DecodingKey']
-    return encodeKey, decodeKey
-
-ENCODE_KEY, DECODE_KEY = apikey()
-    
 
 
 def view_xml(text):
@@ -80,7 +70,7 @@ def _handle_response(response):
 @ftracer
 def getRTMSDataSvcAptTradeDev(locationCode='11110', tradeMonth='202305', n_rows='1000'):
     url = 'http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTradeDev'
-    params ={'serviceKey' : DECODE_KEY, 'pageNo' : '1', 'numOfRows' : n_rows, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
+    params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'pageNo' : '1', 'numOfRows' : n_rows, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     response = requests.get(url, params=params)
 
     return _handle_response(response)
@@ -92,7 +82,7 @@ def getRTMSDataSvcAptTradeDev(locationCode='11110', tradeMonth='202305', n_rows=
 # @ftracer
 def getRTMSDataSvcAptRent(locationCode='11110', tradeMonth='202305'):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptRent'
-    params ={'serviceKey' : DECODE_KEY, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth}
+    params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth}
     response = requests.get(url, params=params)
     
     return _handle_response(response)
@@ -102,7 +92,7 @@ def getRTMSDataSvcAptRent(locationCode='11110', tradeMonth='202305'):
 @ftracer
 def getRTMSDataSvcRHTrade(locationCode='11110', tradeMonth='202305'):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHTrade'
-    params ={'serviceKey' : DECODE_KEY, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
+    params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     response = requests.get(url, params=params)
 
     return _handle_response(response)
@@ -112,7 +102,7 @@ def getRTMSDataSvcRHTrade(locationCode='11110', tradeMonth='202305'):
 @ftracer
 def getRTMSDataSvcRHRent(locationCode='11110', tradeMonth='202305'):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHRent'
-    params ={'serviceKey' : DECODE_KEY, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
+    params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     response = requests.get(url, params=params)
 
     return _handle_response(response)
@@ -123,7 +113,8 @@ def getRTMSDataSvcRHRent(locationCode='11110', tradeMonth='202305'):
 @ftracer
 def getRTMSDataSvcSilvTrade(locationCode='11110', tradeMonth='202305'):
     url = 'http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSilvTrade'
-    params ={'serviceKey' : DECODE_KEY, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
+    params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     response = requests.get(url, params=params)
 
     return _handle_response(response)
+

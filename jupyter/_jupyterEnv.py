@@ -3,22 +3,26 @@ import os
 from importlib import reload 
 import json 
 
-sys.path.append(os.path.join("C:\\pypjts", 'GovDataScience', 'src'))
-for path in sorted(sys.path): print(path)
-
 
 import requests
 import pandas as pd
 
 
 
-from govdatascience import openapi, realstate
+sys.path.append(os.path.join("C:\\pypjts", 'GovDataScience', 'src'))
+for path in sorted(sys.path): print(path)
+
+
+from govdatascience.openapi import datagokr, sgis, bok
 from govdatascience.dataengine import database, datamodels, metadata, schmodels
 from govdatascience.dataengine.database import db
+from govdatascience import realstate, ecos
+
 
 def reload_all():
     modules =[
         database, metadata, datamodels, schmodels,
-        openapi, realstate,
+        datagokr, sgis, bok, 
+        realstate, ecos,
     ]
     for m in modules: reload(m)
