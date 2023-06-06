@@ -508,8 +508,10 @@ class BOKStatisticTableList(database.Collection):
     def __init__(self): super().__init__(self.__class__.__name__)
     def view(self):
         f = {
-            # 'STAT_CODE': {'$regex': '[A-Z0-9]{7}'},
-            'CYCLE': {'$ne': None},
+            # 'STAT_CODE': {'$regex': '\d{3}Y\d{3}'},
+            # 'CYCLE': {'$ne': None},
+            'SRCH_YN': 'Y',
+            'STAT_NAME': {'$regex': '국민'},
         }
         p = {c:0 for c in []}
         p.update({'_id': 0})

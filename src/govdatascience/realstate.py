@@ -12,7 +12,7 @@ import pandas as pd
 from ipylib.idebug import *
 
 
-from govdatascience import openapi
+from govdatascience.openapi import datagokr
 from govdatascience.dataengine import datamodels, schmodels
 
 
@@ -48,7 +48,7 @@ def collect_RealState(data_type):
     # 신청가능 트래픽 개발계정 : 1,000 / 운영계정 : 활용사례 등록시 신청하면 트래픽 증가 가능
     model1 = datamodels.CHECKLIST_RealEstate()
     df = model1.target_ReqPool(dataName, limit=1000)
-    req_func = getattr(openapi, dataName)
+    req_func = getattr(datagokr, dataName)
 
     pretty_title(f'{data_type} 수집대상')
     print(df)
