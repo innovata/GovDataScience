@@ -29,9 +29,14 @@ def view_xml(text):
 
 def _build_xmlFilepath(filename):
     path = os.path.abspath(__file__)
-    path = os.path.dirname(path)
-    path = os.path.join(path, '_temp_xmls', filename)
-    return path
+    _dir = os.path.dirname(path)
+    _dir = os.path.join(_dir, '_temp_xmls')
+    try:
+        os.mkdir(_dir)
+    except Exception as e:
+        pass 
+    filepath = os.path.join(_dir, filename)
+    return filepath
 
 
 def _handle_response(response):
