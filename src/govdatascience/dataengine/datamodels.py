@@ -48,12 +48,12 @@ class LocationCode(database.Collection):
             # '법정동명': {'$regex': '경기.+시$'},
             # '법정동명': {'$regex': '인천.+구$'},
             # '법정동명': {'$regex': '광역시.+구$'},
-            '법정동명': {'$regex': '서울.+구$|경기.+시$|인천.+구$|광역시.+구$'},
+            # '법정동명': {'$regex': '서울.+구$|경기.+시$|인천.+구$|광역시.+구$'},
             # '법정동명': {'$regex': '구$|시$'},
             # '법정동명': {'$regex': '도.+시$'},
             # '지역코드': {'$regex': '[1-9]{4}0'},
             # '지역코드': {'$regex': '[1-9]{3}00'},
-            # '지역코드': '41480',
+            '지역코드': '11140',
         }
         data = self.load(f)
         df = pd.DataFrame(data)
@@ -199,24 +199,42 @@ class CHECKLIST_RealEstate(database.Collection):
 
     """OpenAPI신규수집대상"""
     def target_ReqPool(self, dataName, limit=1000):
+        # f = {
+        #     '법정동명': {'$regex': '서울.+구$'},
+        #     'dataName': dataName,
+        #     'totalCount': None,
+        # }
         f = {
-            '법정동명': {'$regex': '서울.+구$'},
+            '법정동명': {'$regex': '서울.*강남구$'},
             'dataName': dataName,
-            'totalCount': None,
+            # 'totalCount': None,
+            # 'totalCount': {'$gt': 0},
         }
         data = self.load(f, sort=[('계약연월',-1), ('법정동명',1)], limit=limit)
         return pd.DataFrame(data)
 
+    def inspect(self):
+        cols = ['법정동명', '지역코드', 'dataName', 'totalCount', '계약연월', 'numOfRows', 'pageNo', 'resultCode', 'resultMsg']
+        database.print_colunqval(self, cols)
     def view(self):
         # self._manipulate01()
+        # self._manipulate02()
+        # self._manipulate03()
+        # self._parse_data()
 
         f = {
-            # '법정동명': {'$regex': '서울'},
-            'dataName': {'$ne': None},
+            '법정동명': {'$regex': '서울'},
+            # 'dataName': {'$ne': None},
             # 'dataName': None,
-            # 'totalCount': None
+            'dataName': 'getRTMSDataSvcAptRent',
+            # 'totalCount': None,
+            # 'totalCount': {'$ne': None},
+            'totalCount': {'$gt': 0},
+            # 'totalCount': 0,
+            # '계약연월': {'$regex': '^2000'},
         }
-        data = self.load(f, sort=[('계약연월',-1)])
+
+        data = self.load(f, sort=[('계약연월',-1), ('법정동명',1)])
         df = pd.DataFrame(data)
         print({'FrameLen': len(df)})
         return df 
@@ -248,6 +266,66 @@ class CHECKLIST_RealEstate(database.Collection):
             cursor = model.find({}, {'_id':0})
             data = list(cursor)
             self.insert_many(data)
+    def _manipulate02(self):
+        f = {
+            'totalCount': {'$ne': None},
+        }
+        self.update_many(
+            f,
+            {'$set': {
+                'resultMsg': 'NORMAL SERVICE.',
+                'pageNo': 1,
+                'resultCode': '00',
+                'numOfRows': 1000,
+            }}
+        )
+    """중복제거"""
+    def _manipulate03(self):
+        cols = ['계약연월', '지역코드', 'dataName']
+        p = {c:1 for c in cols}
+        cursor = self.find({}, {})
+        data = list(cursor)
+        df = pd.DataFrame(data)
+        print({'중복제거전': len(df)})
+        _df = df.drop_duplicates(subset=cols)
+        print({'중복제거후': len(_df)})
+        
+        TF = df.duplicated(subset=cols, keep='first')
+        _df = df[TF]
+        print({'_dfLen': len(_df)})
+        if len(_df) == 0:
+            logger.info('중복데이타없음')
+        else: 
+            _df = _df.reset_index(drop=True)
+            _df = _df.dropna(axis=1, how='all')
+            # # _df = _df.query('totalCount > 0')
+            print(_df)
+            # ids = list(_df._id)
+            # print(ids)
+            # self.delete_many({'_id': {'$in': ids}})
+        
+    """수집결과 업데이트"""
+    def update_result(self, d, locationCode, tradeMonth):
+        f = {'지역코드': locationCode, '계약연월': tradeMonth}
+        # 데이타파싱
+        d.update(f)
+        for col in ['totalCount', 'numOfRows', 'pageNo']:
+            d[col] = int(d[col])
+        self.update_one(f, {'$set': d})
+    """데이터파싱"""
+    def _parse_data(self):
+        f = {
+            'totalCount': {'$ne': None},
+        }
+        cursor = self.find(f)
+        data = list(cursor)
+        for d in data:
+            self.update_one(
+                {'_id': d['_id']},
+                {'$set': {
+                    'totalCount': int(d['totalCount'])
+                }}
+            )
 
 
 
@@ -339,61 +417,120 @@ class CHECKLIST_VillaRent(database.Collection):
 
 
 ############################################################
-"""체크리스트"""
+"""데이타 업데이터"""
 ############################################################
 
-"""아파트매매 실거래 상세 자료"""
-class AptTradeRealContract(database.Collection):
 
-    def __init__(self):
-        super().__init__(self.__class__.__name__)
-    def inspect(self):
-        sch = schmodels.RealState()
-        database.print_colunqval(self, sch.columns)
-    def load_frame(self, f, p, **kwargs):
+"""법정동명을 지역1/지역2로 나누기"""
+def assign_newColumns01(model):
+    f = {
+        '폐지여부': '존재',
+        '지역코드': {'$regex': '[1-9]{4}0'},
+    }
+    cursor = LocationCode().find(f)
+    data = list(cursor)
+    df = pd.DataFrame(data)
+    df = df.drop_duplicates(subset=['지역코드'], keep='first')
+    print(df.reset_index(drop=True))
+    data = df.to_dict('records')
+    # return 
+    for d in data:
+        try:
+            region1, region2 = d['법정동명'].split(' ')
+            region1 = region1.strip()
+            region2 = region2.strip()
+        except Exception:
+            print(d)
+            region1, region2 = d['법정동명'], None
+        finally:
+            locationCode = d['지역코드']
+            print('업데이트중...', [locationCode, region1, region2])
+            model.update_many(
+                {'지역코드': locationCode},
+                {'$set': {'지역1': region1, '지역2': region2}}
+            )
+
+    logger.info('신규컬럼생성01완료')
+
+
+@ctracer
+def assign_newColumns02(model):
+
+    """계약일자 컬럼추가"""
+    def __ContractDate__(d, _doc):
+        dt = datetime(d['년'], d['월'], d['일']).astimezone()
+        _doc.update({'계약일자': dt})
+        return _doc
+    """아파트ID 컬럼추가"""
+    def __AptId__(d, _doc):
+        _doc.update({'AptId': d['일련번호'] + '_' + str(d['전용면적'])})
+        return _doc 
+    
+    f = {'$or': [
+            {'계약일자': None},
+            {'AptId': None}
+    ]}
+    cursor = model.find(f)
+    doc = {}
+    for d in list(cursor):
+        doc = __ContractDate__(d, doc)
+        doc = __AptId__(d, doc)
+        # print(doc)
+        model.update_one(
+            {'_id': d['_id']},
+            {'$set': doc}
+        )
+    logger.info('신규컬럼생성02완료')
+
+
+@ctracer
+def _manipulate01(model):
+    model.update_many(
+        {},
+        {'$rename': {'검색연월': '계약연월'}}
+    )
+
+
+############################################################
+"""실제 데이타"""
+############################################################
+
+
+
+class RealEstateBase(database.Collection):
+
+    def __init__(self): super().__init__(self.__class__.__name__)
+    def load_frame(self, f, p={'_id':0}, **kwargs):
         print({'필터': f})
         data = self.load(f, p, **kwargs)
-        # print({'DataLen': len(data)})
+        print({'DataLen': len(data)})
         try:
             for d in data: d['계약일자'] = d['계약일자'].astimezone()
         except Exception as e: pass 
-        return pd.DataFrame(data)
-    def view(self):
-        # self._manipulate01()
+        df = pd.DataFrame(data)
+        try:
+            df = df.sort_values('계약일자', ascending=False).reset_index(drop=True)
+        except Exception as e: pass 
+        return df 
+    @ctracer
+    def save_data(self, data, tradeMonth):
+        if len(data) == 0:
+            logger.warning('데이타없음')
+        else:
+            df = pd.DataFrame(data)
+            df['계약연월'] = tradeMonth
+            print(df)
+            _data = df.to_dict('records')
+            
+            sch = schmodels.RealState()
+            _data = sch.parse_data(_data)
 
-        o = LocationCode().select({'법정동명': {'$regex': '강남구'}})
-
-        f = {
-            # '지역코드': o.지역코드,
-            '지역1': '서울특별시',
-            '지역2': {'$regex': '노원'},
-            # '계약연월': None,
-            # '계약연월': {'$ne': None},
-            # '아파트': {'$regex': '현대2차'},
-            # '지역1': {'$regex': '^서울'}
-            # '일련번호': '11560-75',
-            '거래유형': '직거래',
-        }
-        sch = schmodels.RealState()
-        cols = sch.get_cols(column='코드$|번호$|^해제')
-        cols.remove('일련번호')
-        
-        p = {c:0 for c in cols}
-        df = self.load_frame(f, p, sort=[('년',-1), ('월',-1), ('일',-1)])
-        # df = df.drop_duplicates(subset=['지역코드'], keep='first').\
-        #         reset_index(drop=True)
-        print({'FrameLen': len(df)})
-
-        def __groupby01__(df):
-            g = df.groupby('아파트').count()
-            print(g.sort_values('거래금액', ascending=False))
-
-        __groupby01__(df)
-        return df
+            self.insert_many(_data)
+    @ctracer
     def clean_values_by_dtypes(self):
         cursor = self.find()
         data = list(cursor)
-        sch = schmodels.ApartmentRealTrade()
+        sch = schmodels.RealState()
         try:
             data = sch.parse_data(data)
         except Exception:
@@ -403,74 +540,98 @@ class AptTradeRealContract(database.Collection):
             # return df 
             self.drop()
             self.insert_many(data)
+        logger.info('데이타청소완료')
 
-    def assign_newColumns01(self):
-        model = LocationCode()
-        df = model.target01('서울')
-        data = df.to_dict('records')
-        for d in data:
-            region1, region2 = d['법정동명'].split(' ')
-            region1 = region1.strip()
-            region2 = region2.strip()
-            print([region1, region2])
-            locationCode = d['지역코드']
-            self.update_many(
-                {'지역코드': locationCode},
-                {'$set': {'지역1': region1, '지역2': region2}}
-            )
-    def assign_newColumns02(self):
 
-        """계약일자 컬럼추가"""
-        def __ContractDate__(d, _doc):
-            dt = datetime(d['년'], d['월'], d['일']).astimezone()
-            _doc.update({'계약일자': dt})
-            return _doc
-        """아파트ID 컬럼추가"""
-        def __AptId__(d, _doc):
-            _doc.update({'AptId': d['일련번호'] + '_' + str(d['전용면적'])})
-            return _doc 
+"""아파트매매 실거래 상세 자료"""
+class AptTradeRealContract(RealEstateBase):
+
+    def __init__(self): super().__init__()
+    def inspect(self):
+        sch = schmodels.RealState()
+        cols = sch.columns + ['계약연월','계약일자','지역1','지역2']
+        database.print_colunqval(self, cols)
+    def view(self):
+        # _manipulate01(self)
+        # assign_newColumns01(self)
+        # assign_newColumns02(self)
+
+        o = LocationCode().select({'법정동명': {'$regex': '강남구'}})
+        f = {
+            # '지역코드': o.지역코드,
+            '지역1': '서울특별시',
+            '지역2': {'$regex': '강남구'},
+            # '계약연월': None,
+            # '계약연월': {'$ne': None},
+            # '아파트': {'$regex': '현대2차'},
+            # '지역1': {'$regex': '^서울'}
+            # '일련번호': '11560-75',
+            # '거래유형': '직거래',
+        }
+        sch = schmodels.RealState()
+        cols = sch.get_cols(column='코드$|번호$|^해제')
+        cols.remove('일련번호')
         
-        cursor = self.find(limit=10)
-        doc = {}
-        for d in list(cursor):
-            doc = __ContractDate__(d, doc)
-            doc = __AptId__(d, doc)
-            # print(doc)
-            self.update_one(
-                {'_id': d['_id']},
-                {'$set': doc}
-            )
-    
-    def _manipulate01(self):
-        self.update_many(
-            {},
-            {'$rename': {'검색연월': '계약연월'}}
-        )
+        p = {c:0 for c in cols}
+        df = self.load_frame(f, p)
+        # df = df.drop_duplicates(subset=['지역코드'], keep='first').\
+        #         reset_index(drop=True)
+        print({'FrameLen': len(df)})
+        df = df.sort_values('계약일자').reset_index(drop=True)
+
+        def __groupby01__(df):
+            g = df.groupby('아파트').count()
+            print(g.sort_values('거래금액', ascending=False))
+
+        def __uniqueValues__(df):
+            for c in list(df.columns):
+                values = list(df[c].unique())
+                print(c, len(values), values)
+
+        # __groupby01__(df)
+        __uniqueValues__(df)
+        
+        return df
     
 
 
 """국토교통부_아파트 전월세 자료"""
-class AptRent(database.Collection):
+class AptRent(RealEstateBase):
 
-    def __init__(self): super().__init__(self.__class__.__name__)
+    def __init__(self): super().__init__()
     def view(self):
+        # assign_newColumns01(self)
+        # assign_newColumns02(self)
+        _manipulate01(self)
+        # self.clean_values_by_dtypes()
+
         f = {
             # '계약연월': None,
-            '아파트': '신답경남',
+            # '아파트': '신답경남',
+            # '지역코드': '11140',
+            '지역1': {'$regex': '서울'},
+            # '지역2': {'$regex': '강남'},
+            # '계약연월': None,
+            # '계약연월': {'$ne': None},
+            # '아파트': {'$regex': '현대2차'},
+            # '지역1': {'$regex': '^서울'}
+            # '일련번호': '11560-75',
+            # '거래유형': '직거래',
         }
-        data = self.load(f)
-        df = pd.DataFrame(data)
+        df = self.load_frame(f)
         # df = df.drop_duplicates(subset=['지역코드'], keep='first').\
         #         reset_index(drop=True)
         print({'FrameLen': len(df)})
+        df.info()
+        print(list(df.지역2.unique()))
         return df 
 
 
 
 """국토교통부_연립다세대 매매 실거래자료"""
-class VillaTradeRealContract(database.Collection):
+class VillaTradeRealContract(RealEstateBase):
 
-    def __init__(self): super().__init__(self.__class__.__name__)
+    def __init__(self): super().__init__()
     def view(self):
         f = {
             # '계약연월': None,
@@ -482,9 +643,9 @@ class VillaTradeRealContract(database.Collection):
 
 
 """국토교통부_연립다세대 전월세 자료"""
-class VillaRent(database.Collection):
+class VillaRent(RealEstateBase):
 
-    def __init__(self): super().__init__(self.__class__.__name__)
+    def __init__(self): super().__init__()
     def view(self):
         f = {
             # '계약연월': None,

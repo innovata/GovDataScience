@@ -16,13 +16,13 @@ for path in sorted(sys.path): print(path)
 from govdatascience.openapi import datagokr, sgis, bok
 from govdatascience.dataengine import database, datamodels, metadata, schmodels
 from govdatascience.dataengine.database import db
-from govdatascience import realstate, ecos
+from govdatascience import realestate, ecos
 
 
 def reload_all():
     modules =[
         database, metadata, datamodels, schmodels,
         datagokr, sgis, bok, 
-        realstate, ecos,
+        realestate, ecos,
     ]
     for m in modules: reload(m)

@@ -6,6 +6,8 @@ import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import ElementTree
 from urllib.parse import urlparse
 from dataclasses import dataclass
+from time import sleep
+from datetime import datetime
 
 
 import requests
@@ -36,45 +38,58 @@ def _build_xmlFilepath(filename):
     except Exception as e:
         pass 
     filepath = os.path.join(_dir, filename)
-    return filepath
+    return filepath + '.xml'
 
 
 def _handle_response(response):
+    # pp.pprint(response.__dict__)
     root = ET.fromstring(response.text)
-    resultCode = root.find('header/resultCode').text
-    if resultCode == '00': 
-        cnt = root.find('body/totalCount').text
-        if len(cnt) == 0: 
-            view_xml(response.text)
-            data = []
-        else:
-            o = urlparse(response.url)
-            filename = o.path.split('/')[-1]
-            fpath = _build_xmlFilepath(filename)
 
-            items = root.find('body/items')
-            ElementTree(items).write(fpath, encoding='UTF-8')
-            df = pd.read_xml('output.xml')
-            data = df.to_dict('records')
+    d = {
+        'resultCode': root.find('header/resultCode').text,
+        'resultMsg': root.find('header/resultMsg').text,
+        'numOfRows': int(root.find('body/numOfRows').text),
+        'pageNo': int(root.find('body/pageNo').text),
+        'totalCount': int(root.find('body/totalCount').text),
+    }
+    
+    o = urlparse(response.url)
+    # print(o)
+    dataName = o.path.split('/')[-1]
+    xml_file = _build_xmlFilepath(dataName)
+    d.update({'dataName': dataName})
+    # print({'xml_file': xml_file})
 
-        return {
-            'dataName': filename,
-            'resultCode': root.find('header/resultCode').text,
-            'resultMsg': root.find('header/resultMsg').text,
-            'numOfRows': root.find('body/numOfRows').text,
-            'pageNo': root.find('body/pageNo').text,
-            'totalCount': root.find('body/totalCount').text,
-            'data': data,
-        }
+    items = root.find('body/items')
+    ElementTree(items).write(xml_file, encoding='UTF-8')
+
+    try:
+        df = pd.read_xml(xml_file)
+        data = df.to_dict('records')
+    except Exception as e:
+        logger.warning(d)
+        data = []
+    print(dataName, {'DataLen': len(data)})
+    d.update({'data': data})
+    
+    os.remove(xml_file)
+
+    return d 
+
+
+def _inputTradeMonth(value):
+    if value is None:
+        return datetime.now().astimezone().strftime('%Y%m')
     else:
-        view_xml(response.text)
+        return value
 
 
 
 """국토교통부_아파트매매 실거래 상세 자료"""
 @ftracer
-def getRTMSDataSvcAptTradeDev(locationCode='11110', tradeMonth='202305', n_rows='1000'):
+def getRTMSDataSvcAptTradeDev(locationCode, tradeMonth=None, n_rows='1000'):
     url = 'http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTradeDev'
+    tradeMonth = _inputTradeMonth(tradeMonth)
     params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'pageNo' : '1', 'numOfRows' : n_rows, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     response = requests.get(url, params=params)
 
@@ -85,8 +100,9 @@ def getRTMSDataSvcAptTradeDev(locationCode='11110', tradeMonth='202305', n_rows=
 
 """국토교통부_아파트 전월세 자료"""
 # @ftracer
-def getRTMSDataSvcAptRent(locationCode='11110', tradeMonth='202305'):
+def getRTMSDataSvcAptRent(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptRent'
+    tradeMonth = _inputTradeMonth(tradeMonth)
     params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth}
     response = requests.get(url, params=params)
     
@@ -95,8 +111,9 @@ def getRTMSDataSvcAptRent(locationCode='11110', tradeMonth='202305'):
 
 """국토교통부_연립다세대 매매 실거래자료"""
 @ftracer
-def getRTMSDataSvcRHTrade(locationCode='11110', tradeMonth='202305'):
+def getRTMSDataSvcRHTrade(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHTrade'
+    tradeMonth = _inputTradeMonth(tradeMonth)
     params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     response = requests.get(url, params=params)
 
@@ -105,8 +122,9 @@ def getRTMSDataSvcRHTrade(locationCode='11110', tradeMonth='202305'):
 
 """국토교통부_연립다세대 전월세 자료"""
 @ftracer
-def getRTMSDataSvcRHRent(locationCode='11110', tradeMonth='202305'):
+def getRTMSDataSvcRHRent(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHRent'
+    tradeMonth = _inputTradeMonth(tradeMonth)
     params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     response = requests.get(url, params=params)
 
@@ -116,8 +134,9 @@ def getRTMSDataSvcRHRent(locationCode='11110', tradeMonth='202305'):
 
 """국토교통부_아파트 분양권전매 신고 자료"""
 @ftracer
-def getRTMSDataSvcSilvTrade(locationCode='11110', tradeMonth='202305'):
+def getRTMSDataSvcSilvTrade(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSilvTrade'
+    tradeMonth = _inputTradeMonth(tradeMonth)
     params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     response = requests.get(url, params=params)
 

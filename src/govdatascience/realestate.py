@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import ElementTree
 import re 
 from time import sleep
+from datetime import datetime, timedelta
 
 
 import pandas as pd
@@ -17,6 +18,29 @@ from govdatascience.dataengine import datamodels, schmodels
 
 
 
+
+
+"""수집할 계약연월 정의"""
+def __tradeMonthPool__():
+    end = datetime.now() + timedelta(days=31)
+    end = end.strftime('%Y/%m')
+    dts = pd.bdate_range(start='1990/1', end=end, freq='M')
+    dts = sorted(dts, reverse=True)
+    tradeMonths = [t.strftime("%Y%m") for t in dts]
+    return tradeMonths
+
+
+"""수집할 지역코드 정의"""
+def __locationCodePool__(dataName):
+    f = {
+        '법정동명': {'$regex': '서울.*강남구$'},
+        'dataName': dataName,
+        # 'totalCount': None,
+        # 'totalCount': {'$gt': 0},
+    }
+    model = datamodels.LocationCode()
+    model
+    return 
 
 
 
@@ -53,32 +77,22 @@ def collect_RealState(data_type):
     pretty_title(f'{data_type} 수집대상')
     print(df)
     # return df 
-    data = df.to_dict('records')
+    target = df.to_dict('records')
 
     def __collect__(locationCode, tradeMonth):
         d = req_func(locationCode, tradeMonth)
-        if d is None:
-            return False 
-        else:
-            """다운로드 개수 업데이트"""
-            f = {'지역코드': locationCode, '계약연월': tradeMonth}
-            data = d.pop('data')
-            d.update(f)
-            model1.update_one(f, {'$set': d})
-            
-            """DB저장"""
-            df = pd.DataFrame(data)
-            if len(df) > 0:
-                df['계약연월'] = tradeMonth
-                _data = df.to_dict('records')
-                
-                _data = sch.parse_data(_data)
+        data = d.pop('data')
 
-                model2.insert_many(df.to_dict('records'))
-            return True
+        """수집결과 업데이트"""
+        model1.update_result(d, locationCode, tradeMonth)
+        
+        """데이타 저장"""
+        model2.save_data(data, tradeMonth)
+        
+        return True if d['resultCode'] == '00' else False
 
-    _len = len(data)
-    for i, d in enumerate(data, start=1):
+    _len = len(target)
+    for i, d in enumerate(target, start=1):
         result = __collect__(d['지역코드'], d['계약연월'])
         # break
         if result: 
