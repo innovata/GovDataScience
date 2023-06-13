@@ -229,8 +229,9 @@ class CHECKLIST_RealEstate(database.Collection):
         # 기수집된 쌍은 제거
         f = {
             'dataName': dataName,
-            '법정동명': {'$regex': '서울.*강남구$'},
+            # '법정동명': {'$regex': '서울.*강남구$'},
         }
+        print({'필터': f})
         p = {c:1 for c in ['지역코드', '계약연월']}
         data = self.load(f, p)
         # print(pd.DataFrame(data).sort_values('계약연월'))
@@ -264,7 +265,7 @@ class CHECKLIST_RealEstate(database.Collection):
             # '법정동명': {'$regex': '서울'},
             # 'dataName': {'$ne': None},
             # 'dataName': None,
-            'dataName': 'getRTMSDataSvcAptTradeDev',
+            # 'dataName': 'getRTMSDataSvcAptTradeDev',
             # 'totalCount': None,
             # 'totalCount': {'$ne': None},
             # 'totalCount': {'$gt': 0},
@@ -344,8 +345,8 @@ class CHECKLIST_RealEstate(database.Collection):
         
     """수집결과 업데이트"""
     @ctracer
-    def update_result(self, d, locationCode, tradeMonth):
-        f = {'지역코드': locationCode, '계약연월': tradeMonth}
+    def update_result(self, dataName, locationCode, tradeMonth, d):
+        f = {'dataName': dataName, '지역코드': locationCode, '계약연월': tradeMonth}
         # 데이타파싱
         d.update(f)
         for col in ['totalCount', 'numOfRows', 'pageNo']:

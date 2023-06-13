@@ -29,7 +29,7 @@ def view_xml(text):
     print(new_xml)
 
 
-def _build_xmlFilepath(filename):
+def _write_xmlFile(filename, xml_text):
     path = os.path.abspath(__file__)
     _dir = os.path.dirname(path)
     _dir = os.path.join(_dir, '_temp_xmls')
@@ -37,44 +37,60 @@ def _build_xmlFilepath(filename):
         os.mkdir(_dir)
     except Exception as e:
         pass 
-    filepath = os.path.join(_dir, filename)
-    return filepath + '.xml'
+    filepath = os.path.join(_dir, filename) + '.xml'
+    # print(xml_text)
+    root = ET.fromstring(xml_text)
+    head = root.find('header')
+    # print(head)
+    ElementTree(head).write(filepath, encoding='UTF-8')
+    return filepath
 
 
 def _handle_response(response):
     # pp.pprint(response.__dict__)
-    root = ET.fromstring(response.text)
-
-    d = {
-        'resultCode': root.find('header/resultCode').text,
-        'resultMsg': root.find('header/resultMsg').text,
-        'numOfRows': int(root.find('body/numOfRows').text),
-        'pageNo': int(root.find('body/pageNo').text),
-        'totalCount': int(root.find('body/totalCount').text),
-    }
-    
     o = urlparse(response.url)
     # print(o)
     dataName = o.path.split('/')[-1]
-    xml_file = _build_xmlFilepath(dataName)
-    d.update({'dataName': dataName})
-    # print({'xml_file': xml_file})
+    d = {'dataName': dataName}
 
-    items = root.find('body/items')
-    ElementTree(items).write(xml_file, encoding='UTF-8')
+    root = ET.fromstring(response.text)
+    resultCode = root.find('header/resultCode').text
+    resultMsg = root.find('header/resultMsg').text
+    d.update({
+        'resultCode': resultCode,
+        'resultMsg': resultMsg,
+    })
 
+    xml_file = _write_xmlFile(dataName, response.text)
+    print({'xml_file': xml_file})
+
+    # 바디 메타정보 뽑아내기
+    if resultCode == '00':
+        d.update({
+            'numOfRows': int(root.find('body/numOfRows').text),
+            'pageNo': int(root.find('body/pageNo').text),
+            'totalCount': int(root.find('body/totalCount').text),
+        })    
+    else:
+        logger.warning([dataName, resultMsg])
+    
+    # 바디 데이타 뽑아내기
     try:
+        items = root.find('body/items')
+        ElementTree(items).write(xml_file, encoding='UTF-8')
         df = pd.read_xml(xml_file)
-        data = df.to_dict('records')
     except Exception as e:
-        logger.warning([e, d])
-        data = []
-    print(dataName, {'DataLen': len(data)})
-    d.update({'data': data})
+        logger.error([dataName, e])
+        d.update({'data': []})
+    else:
+        data = df.to_dict('records')
+        print(dataName, {'DataLen': len(data)})
+        d.update({'data': data})
     
     os.remove(xml_file)
 
     return d 
+    
 
 
 def _inputTradeMonth(value):

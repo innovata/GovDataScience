@@ -61,21 +61,23 @@ def collect_RealState(data_type):
     print(pd.DataFrame(target))
     # return 
 
-    def __collect__(locationCode, tradeMonth):
+    def __collect__(dataName, locationCode, tradeMonth):
         d = req_func(locationCode, tradeMonth)
-        data = d.pop('data')
+        if d['resultCode'] == '00': 
+            data = d.pop('data')
+            """수집결과 업데이트"""
+            model1.update_result(dataName, locationCode, tradeMonth, d)
+            """데이타 저장"""
+            model2.save_data(data, tradeMonth)
+            return True 
+        else: 
+            logger.warning(d)
+            return False
 
-        """수집결과 업데이트"""
-        model1.update_result(d, locationCode, tradeMonth)
-        
-        """데이타 저장"""
-        model2.save_data(data, tradeMonth)
-        
-        return True if d['resultCode'] == '00' else False
 
     _len = len(target)
     for i, (locationCode, tradeMonth) in enumerate(target, start=1):
-        result = __collect__(locationCode, tradeMonth)
+        result = __collect__(dataName, locationCode, tradeMonth)
         # break
         if result: 
             print(data_type, f"수집중...{i}/{_len}") 
@@ -83,6 +85,6 @@ def collect_RealState(data_type):
             break
         sleep(0.5)
 
-    logger.info(['수집완료', data_type])
+    logger.info([data_type, '수집완료'])
 
     
