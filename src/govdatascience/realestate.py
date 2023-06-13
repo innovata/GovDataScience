@@ -20,27 +20,10 @@ from govdatascience.dataengine import datamodels, schmodels
 
 
 
-"""수집할 계약연월 정의"""
-def __tradeMonthPool__():
-    end = datetime.now() + timedelta(days=31)
-    end = end.strftime('%Y/%m')
-    dts = pd.bdate_range(start='1990/1', end=end, freq='M')
-    dts = sorted(dts, reverse=True)
-    tradeMonths = [t.strftime("%Y%m") for t in dts]
-    return tradeMonths
 
 
-"""수집할 지역코드 정의"""
-def __locationCodePool__(dataName):
-    f = {
-        '법정동명': {'$regex': '서울.*강남구$'},
-        'dataName': dataName,
-        # 'totalCount': None,
-        # 'totalCount': {'$gt': 0},
-    }
-    model = datamodels.LocationCode()
-    model
-    return 
+
+
 
 
 
@@ -71,13 +54,12 @@ def collect_RealState(data_type):
 
     # 신청가능 트래픽 개발계정 : 1,000 / 운영계정 : 활용사례 등록시 신청하면 트래픽 증가 가능
     model1 = datamodels.CHECKLIST_RealEstate()
-    df = model1.target_ReqPool(dataName, limit=1000)
+    target = model1.target_ReqPool(dataName, limit=1000)
     req_func = getattr(datagokr, dataName)
 
     pretty_title(f'{data_type} 수집대상')
-    print(df)
-    # return df 
-    target = df.to_dict('records')
+    print(pd.DataFrame(target))
+    # return 
 
     def __collect__(locationCode, tradeMonth):
         d = req_func(locationCode, tradeMonth)
@@ -92,8 +74,8 @@ def collect_RealState(data_type):
         return True if d['resultCode'] == '00' else False
 
     _len = len(target)
-    for i, d in enumerate(target, start=1):
-        result = __collect__(d['지역코드'], d['계약연월'])
+    for i, (locationCode, tradeMonth) in enumerate(target, start=1):
+        result = __collect__(locationCode, tradeMonth)
         # break
         if result: 
             print(data_type, f"수집중...{i}/{_len}") 

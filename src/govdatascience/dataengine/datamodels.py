@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os 
-from datetime import datetime
+from datetime import datetime, timedelta
+import itertools
 
 
 import pandas as pd
@@ -199,19 +200,56 @@ class CHECKLIST_RealEstate(database.Collection):
 
     """OpenAPI신규수집대상"""
     def target_ReqPool(self, dataName, limit=1000):
-        # f = {
-        #     '법정동명': {'$regex': '서울.+구$'},
-        #     'dataName': dataName,
-        #     'totalCount': None,
-        # }
+        """수집할 계약연월 정의"""
+        def __tradeMonthPool__():
+            end = datetime.now() + timedelta(days=31)
+            end = end.strftime('%Y/%m')
+            dts = pd.bdate_range(start='1990/1', end=end, freq='M')
+            dts = sorted(dts, reverse=True)
+            trade_months = [t.strftime("%Y%m") for t in dts]
+            return trade_months
+        
+        # return __tradeMonthPool__()
+    
+        """수집할 지역코드 정의"""
+        def __locationCodePool__(pat='서울.*강남구$'):
+            if pat is None: 
+                f = {}
+            else:
+                f = {'법정동명': {'$regex': pat}}
+            location_codes = LocationCode().distinct('지역코드', f)
+            return location_codes
+        
+        # return __locationCodePool__()
+    
+        it = itertools.product(__locationCodePool__(), __tradeMonthPool__())
+        pool = [(locationCode, tradeMonth) for locationCode, tradeMonth in it]
+        print({'PoolLen': len(pool)})
+
+        # 기수집된 쌍은 제거
         f = {
-            '법정동명': {'$regex': '서울.*강남구$'},
             'dataName': dataName,
-            # 'totalCount': None,
-            # 'totalCount': {'$gt': 0},
+            '법정동명': {'$regex': '서울.*강남구$'},
         }
-        data = self.load(f, sort=[('계약연월',-1), ('법정동명',1)], limit=limit)
-        return pd.DataFrame(data)
+        p = {c:1 for c in ['지역코드', '계약연월']}
+        data = self.load(f, p)
+        # print(pd.DataFrame(data).sort_values('계약연월'))
+        collected = [(d['지역코드'], d['계약연월']) for d in data]
+        print({'CollectedLen': len(collected)})
+
+        pool = [p for p in pool if p not in collected]
+        print({'PoolLen': len(pool)})
+        # pp.pprint(pool)
+        return pool
+
+    
+        # f = {
+        #     '법정동명': {'$regex': '서울.*강남구$'},
+        #     # 'dataName': dataName,
+        #     # 'totalCount': None,
+        #     # 'totalCount': {'$gt': 0},
+        # }
+        # return pd.DataFrame(data)
 
     def inspect(self):
         cols = ['법정동명', '지역코드', 'dataName', 'totalCount', '계약연월', 'numOfRows', 'pageNo', 'resultCode', 'resultMsg']
@@ -223,17 +261,17 @@ class CHECKLIST_RealEstate(database.Collection):
         # self._parse_data()
 
         f = {
-            '법정동명': {'$regex': '서울'},
+            # '법정동명': {'$regex': '서울'},
             # 'dataName': {'$ne': None},
             # 'dataName': None,
-            'dataName': 'getRTMSDataSvcAptRent',
+            'dataName': 'getRTMSDataSvcAptTradeDev',
             # 'totalCount': None,
             # 'totalCount': {'$ne': None},
-            'totalCount': {'$gt': 0},
+            # 'totalCount': {'$gt': 0},
             # 'totalCount': 0,
             # '계약연월': {'$regex': '^2000'},
         }
-
+        print({'필터': f})
         data = self.load(f, sort=[('계약연월',-1), ('법정동명',1)])
         df = pd.DataFrame(data)
         print({'FrameLen': len(df)})
@@ -305,13 +343,14 @@ class CHECKLIST_RealEstate(database.Collection):
             # self.delete_many({'_id': {'$in': ids}})
         
     """수집결과 업데이트"""
+    @ctracer
     def update_result(self, d, locationCode, tradeMonth):
         f = {'지역코드': locationCode, '계약연월': tradeMonth}
         # 데이타파싱
         d.update(f)
         for col in ['totalCount', 'numOfRows', 'pageNo']:
             d[col] = int(d[col])
-        self.update_one(f, {'$set': d})
+        self.update_one(f, {'$set': d}, True)
     """데이터파싱"""
     def _parse_data(self):
         f = {
@@ -329,90 +368,6 @@ class CHECKLIST_RealEstate(database.Collection):
 
 
 
-
-
-
-"""아파트매매 실거래가 수집이력"""
-class CHECKLIST_AptTradeRealContract(database.Collection):
-
-    def __init__(self): super().__init__(self.__class__.__name__)
-    def __create__(self): __CREATE_CHECKLIST_TYPE01__(self)
-    def view(self):
-        # self._manipulate01()
-
-        f = {
-            # '법정동명': {'$regex': '서울.+강남'},
-            # 'resultCode': {'$ne': None},
-        }
-        data = self.load(f, sort=[('검색연월',-1)])
-        df = pd.DataFrame(data)
-        print({'FrameLen': len(df)})
-        return df 
-    def _manipulate01(self):
-        self.update_many(
-            {},
-            # {'totalCount': {'$gt': 0}},
-            # {'$set': {'dataName': 'getRTMSDataSvcAptTradeDev'}}
-            {'$rename': {'개수': 'totalCount'}}
-        )
-
-
-
-"""국토교통부_아파트 전월세 수집이력"""
-class CHECKLIST_AptRent(database.Collection):
-
-    def __init__(self): super().__init__(self.__class__.__name__)
-    def __create__(self): __CREATE_CHECKLIST_TYPE01__(self)
-    def view(self):
-        # self._manipulate01()
-
-        f = {
-
-        }
-        data = self.load(f)
-        df = pd.DataFrame(data)
-        print({'FrameLen': len(df)})
-        return df 
-    def _manipulate01(self):
-        self.update_many(
-            {},
-            {'$unset': {'data': ''}}
-        )
-
-
-"""국토교통부_연립다세대 매매 실거래자료 수집이력"""
-class CHECKLIST_VillaTradeRealContract(database.Collection):
-
-    def __init__(self): super().__init__(self.__class__.__name__)
-    def __create__(self): __CREATE_CHECKLIST_TYPE01__(self)
-    def view(self):
-        # self._manipulate01()
-
-        f = {
-
-        }
-        data = self.load(f)
-        df = pd.DataFrame(data)
-        print({'FrameLen': len(df)})
-        return df     
-
-
-"""국토교통부_연립다세대 전월세 자료 수집이력"""
-class CHECKLIST_VillaRent(database.Collection):
-
-    def __init__(self): super().__init__(self.__class__.__name__)
-    def __create__(self): __CREATE_CHECKLIST_TYPE01__(self)
-    def view(self):
-        # self._manipulate01()
-
-        f = {
-
-        }
-        data = self.load(f)
-        df = pd.DataFrame(data)
-        print({'FrameLen': len(df)})
-        return df 
-    
 
 
 
@@ -512,7 +467,7 @@ class RealEstateBase(database.Collection):
             df = df.sort_values('계약일자', ascending=False).reset_index(drop=True)
         except Exception as e: pass 
         return df 
-    @ctracer
+    # @ctracer
     def save_data(self, data, tradeMonth):
         if len(data) == 0:
             logger.warning('데이타없음')
@@ -541,6 +496,17 @@ class RealEstateBase(database.Collection):
             self.drop()
             self.insert_many(data)
         logger.info('데이타청소완료')
+    """기 수집된 데이터 키값들"""
+    def already_collected(self, locationCode):
+        f = {
+            # '지역2': {'$regex': '강남구'}
+            '지역코드': locationCode,
+        }
+        p = {c:1 for c in ['지역코드', '계약연월']}
+        df = self.load_frame(f, p, sort=[('계약연월',-1)])
+        df = df.drop_duplicates(keep='first').reset_index(drop=True)
+        return df 
+
 
 
 """아파트매매 실거래 상세 자료"""
@@ -558,9 +524,9 @@ class AptTradeRealContract(RealEstateBase):
 
         o = LocationCode().select({'법정동명': {'$regex': '강남구'}})
         f = {
-            # '지역코드': o.지역코드,
-            '지역1': '서울특별시',
-            '지역2': {'$regex': '강남구'},
+            '지역코드': o.지역코드,
+            # '지역1': '서울특별시',
+            # '지역2': {'$regex': '강남구'},
             # '계약연월': None,
             # '계약연월': {'$ne': None},
             # '아파트': {'$regex': '현대2차'},

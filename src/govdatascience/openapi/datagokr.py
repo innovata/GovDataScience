@@ -67,7 +67,7 @@ def _handle_response(response):
         df = pd.read_xml(xml_file)
         data = df.to_dict('records')
     except Exception as e:
-        logger.warning(d)
+        logger.warning([e, d])
         data = []
     print(dataName, {'DataLen': len(data)})
     d.update({'data': data})
