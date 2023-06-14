@@ -50,11 +50,13 @@ class Collection(collection.Collection):
         except Exception as e:
             msg = '빈데이터를 바로 인서트하는 경우는 비일비재하므로, 여기에서 경고처리한다'
             logger.warning([e, msg])
-    def select(self, f, type='dcls'):
+    def select(self, f, type='dict'):
         try:
             c = self.find(f, limit=1)
             d = list(c)[0]
-        except Exception as e: return None
+        except Exception as e: 
+            logger.warning([e, f])
+            return None
         else:
             if type == 'dcls': return BaseDataClass(**d)
             elif type == 'dict': return d

@@ -13,11 +13,8 @@ from govdatascience.dataengine import datamodels
 
 
 
-def collect_realEstate():
-    realestate.collect_RealState(data_type='아파트매매 실거래')
-    realestate.collect_RealState(data_type='아파트 전월세 자료')
-    realestate.collect_RealState(data_type='연립다세대 매매 실거래자료')
-    realestate.collect_RealState(data_type='연립다세대 전월세')
+def collect_RealEstate():
+    realestate.collect_all_RealState()
 
     # datamodels.ApartmentRealTrade().clean_values_by_dtypes()
 
@@ -28,6 +25,6 @@ def collect_realEstate():
 
 
 if __name__ == '__main__': 
-    p = Process(target=collect_realEstate)
+    p = Process(target=collect_RealEstate)
     p.start()
     p.join()

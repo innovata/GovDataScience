@@ -47,50 +47,52 @@ def _write_xmlFile(filename, xml_text):
 
 
 def _handle_response(response):
-    # pp.pprint(response.__dict__)
-    o = urlparse(response.url)
-    # print(o)
-    dataName = o.path.split('/')[-1]
-    d = {'dataName': dataName}
+    if response is None:
+        return None 
+    else: 
+        # pp.pprint(response.__dict__)
+        o = urlparse(response.url)
+        # print(o)
+        dataName = o.path.split('/')[-1]
+        d = {'dataName': dataName}
 
-    root = ET.fromstring(response.text)
-    resultCode = root.find('header/resultCode').text
-    resultMsg = root.find('header/resultMsg').text
-    d.update({
-        'resultCode': resultCode,
-        'resultMsg': resultMsg,
-    })
-
-    xml_file = _write_xmlFile(dataName, response.text)
-    print({'xml_file': xml_file})
-
-    # 바디 메타정보 뽑아내기
-    if resultCode == '00':
+        root = ET.fromstring(response.text)
+        resultCode = root.find('header/resultCode').text
+        resultMsg = root.find('header/resultMsg').text
         d.update({
-            'numOfRows': int(root.find('body/numOfRows').text),
-            'pageNo': int(root.find('body/pageNo').text),
-            'totalCount': int(root.find('body/totalCount').text),
-        })    
-    else:
-        logger.warning([dataName, resultMsg])
-    
-    # 바디 데이타 뽑아내기
-    try:
-        items = root.find('body/items')
-        ElementTree(items).write(xml_file, encoding='UTF-8')
-        df = pd.read_xml(xml_file)
-    except Exception as e:
-        logger.error([dataName, e])
-        d.update({'data': []})
-    else:
-        data = df.to_dict('records')
-        print(dataName, {'DataLen': len(data)})
-        d.update({'data': data})
-    
-    os.remove(xml_file)
+            'resultCode': resultCode,
+            'resultMsg': resultMsg,
+        })
 
-    return d 
-    
+        xml_file = _write_xmlFile(dataName, response.text)
+        print({'xml_file': xml_file})
+
+        # 바디 메타정보 뽑아내기
+        if resultCode == '00':
+            d.update({
+                'numOfRows': int(root.find('body/numOfRows').text),
+                'pageNo': int(root.find('body/pageNo').text),
+                'totalCount': int(root.find('body/totalCount').text),
+            })    
+        else:
+            logger.warning([dataName, resultMsg])
+        
+        # 바디 데이타 뽑아내기
+        try:
+            items = root.find('body/items')
+            ElementTree(items).write(xml_file, encoding='UTF-8')
+            df = pd.read_xml(xml_file)
+        except Exception as e:
+            logger.error([dataName, e])
+            d.update({'data': []})
+        else:
+            data = df.to_dict('records')
+            print(dataName, {'DataLen': len(data)})
+            d.update({'data': data})
+        
+        os.remove(xml_file)
+
+        return d 
 
 
 def _inputTradeMonth(value):
@@ -100,6 +102,15 @@ def _inputTradeMonth(value):
         return value
 
 
+def __reqGet__(url, params):
+    try:
+        response = requests.get(url, params=params)
+    except Exception as e:
+        logger.error(e)
+    else:
+        return response
+    
+
 
 """국토교통부_아파트매매 실거래 상세 자료"""
 @ftracer
@@ -107,11 +118,8 @@ def getRTMSDataSvcAptTradeDev(locationCode, tradeMonth=None, n_rows='1000'):
     url = 'http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTradeDev'
     tradeMonth = _inputTradeMonth(tradeMonth)
     params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'pageNo' : '1', 'numOfRows' : n_rows, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
-    response = requests.get(url, params=params)
-
-    return _handle_response(response)
-    
-
+    res = __reqGet__(url, params)
+    return _handle_response(res)
 
 
 """국토교통부_아파트 전월세 자료"""
@@ -120,9 +128,8 @@ def getRTMSDataSvcAptRent(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptRent'
     tradeMonth = _inputTradeMonth(tradeMonth)
     params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth}
-    response = requests.get(url, params=params)
-    
-    return _handle_response(response)
+    res = __reqGet__(url, params)
+    return _handle_response(res)
 
 
 """국토교통부_연립다세대 매매 실거래자료"""
@@ -131,9 +138,8 @@ def getRTMSDataSvcRHTrade(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHTrade'
     tradeMonth = _inputTradeMonth(tradeMonth)
     params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
-    response = requests.get(url, params=params)
-
-    return _handle_response(response)
+    res = __reqGet__(url, params)
+    return _handle_response(res)
 
 
 """국토교통부_연립다세대 전월세 자료"""
@@ -142,10 +148,8 @@ def getRTMSDataSvcRHRent(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHRent'
     tradeMonth = _inputTradeMonth(tradeMonth)
     params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
-    response = requests.get(url, params=params)
-
-    return _handle_response(response)
-
+    res = __reqGet__(url, params)
+    return _handle_response(res)
 
 
 """국토교통부_아파트 분양권전매 신고 자료"""
@@ -154,7 +158,6 @@ def getRTMSDataSvcSilvTrade(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSilvTrade'
     tradeMonth = _inputTradeMonth(tradeMonth)
     params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
-    response = requests.get(url, params=params)
-
-    return _handle_response(response)
+    res = __reqGet__(url, params)
+    return _handle_response(res)
 

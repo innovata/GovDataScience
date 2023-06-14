@@ -45,7 +45,7 @@ class LocationCode(database.Collection):
         f = {
             '폐지여부': '존재',
             # '법정동명': {'$regex': '특별.+시$|광역시$'},
-            # '법정동명': {'$regex': '서울.+구$'},
+            '법정동명': {'$regex': '서울.+구$'},
             # '법정동명': {'$regex': '경기.+시$'},
             # '법정동명': {'$regex': '인천.+구$'},
             # '법정동명': {'$regex': '광역시.+구$'},
@@ -54,9 +54,9 @@ class LocationCode(database.Collection):
             # '법정동명': {'$regex': '도.+시$'},
             # '지역코드': {'$regex': '[1-9]{4}0'},
             # '지역코드': {'$regex': '[1-9]{3}00'},
-            '지역코드': '11140',
+            # '지역코드': '11140',
         }
-        data = self.load(f)
+        data = self.load(f, sort=[('법정동명',1)])
         df = pd.DataFrame(data)
         df = df.drop_duplicates(subset=['지역코드'], keep='first').\
                 reset_index(drop=True)
@@ -199,9 +199,21 @@ class CHECKLIST_RealEstate(database.Collection):
             logger.warning(['추가수집Pool없음', region])
 
     """OpenAPI신규수집대상"""
-    def target_ReqPool(self, dataName, locationPat='서울.*강남구$', limit=1000):
+    def target_ReqPool(self, dataName):
+
+        """강남구 데이타의 계약연월리스트가 기준"""
+        def has_stnd_data():
+            f = {
+                'dataName': dataName,
+                '지역코드': '11680',# 강남구
+            }
+            n = self.count_documents(filter=f)
+            return False if n == 0 else True
+        
+        # return has_stnd_data()
+
         """수집할 계약연월 정의"""
-        def __tradeMonthPool__():
+        def __tradeMonthPool01__():
             end = datetime.now() + timedelta(days=31)
             end = end.strftime('%Y/%m')
             dts = pd.bdate_range(start='1990/1', end=end, freq='M')
@@ -209,48 +221,67 @@ class CHECKLIST_RealEstate(database.Collection):
             trade_months = [t.strftime("%Y%m") for t in dts]
             return trade_months
         
+        # return __tradeMonthPool01__()
+        
+        """기준데이타(강남구)의 수집된 계약연월"""
+        def __tradeMonthPool02__():
+            f = {
+                'dataName': dataName,
+                '지역코드': '11680',
+                'totalCount': {'$gt': 0},
+            }
+            return sorted(self.distinct('계약연월', f), reverse=True)
+        
+        # return __tradeMonthPool02__()
+
+        # 기준데이타(강남구)가 있는지 확인하고 케이스별로 자동으로 결정해서
+        def __tradeMonthPool__():
+            if has_stnd_data(): 
+                return __tradeMonthPool02__()
+            else: 
+                return __tradeMonthPool01__()
+        
         # return __tradeMonthPool__()
+
+        # 기수집된 계약연월은 제거
+        def __targetTradeMonth__(locationCode, trade_month_pool):
+            f = {
+                'dataName': dataName,
+                '지역코드': locationCode,
+            }
+            collected = self.distinct('계약연월', f)
+            return [p for p in trade_month_pool if p not in collected]
     
         """수집할 지역코드 정의"""
-        def __locationCodePool__(locationPat):
-            if locationPat is None: 
-                f = {}
+        def __locationCodePool__():
+            if has_stnd_data():
+                f = {'법정동명': {
+                    '$regex': '서울.+구$',
+                    '$not': {'$regex': '강남구$'},
+                }}
             else:
-                f = {'법정동명': {'$regex': locationPat}}
-            location_codes = LocationCode().distinct('지역코드', f)
+                f = {'법정동명': {'$regex': '강남구$'}}
+            model = LocationCode()
+            data = model.load(f, sort=[('법정동명',1)])
+            df = pd.DataFrame(data)
+            location_codes = list(df.지역코드)
+            # print({'LocationLen': len(location_codes)})
             return location_codes
         
         # return __locationCodePool__()
-    
-        it = itertools.product(__locationCodePool__(locationPat), __tradeMonthPool__())
-        pool = [(locationCode, tradeMonth) for locationCode, tradeMonth in it]
-        print({'PoolLen': len(pool)})
 
-        # 기수집된 쌍은 제거
-        f = {
-            'dataName': dataName,
-            # '법정동명': {'$regex': '서울.*강남구$'},
-        }
-        print({'필터': f})
-        p = {c:1 for c in ['지역코드', '계약연월']}
-        data = self.load(f, p)
-        # print(pd.DataFrame(data).sort_values('계약연월'))
-        collected = [(d['지역코드'], d['계약연월']) for d in data]
-        print({'CollectedLen': len(collected)})
+        loc_code_pool = __locationCodePool__()
+        trade_month_pool = __tradeMonthPool__()
+        print({'LocationLen': len(loc_code_pool)})
+        print({'TradeMonthLen': len(trade_month_pool)})
 
-        pool = [p for p in pool if p not in collected]
+        pool = []
+        for locationCode in loc_code_pool:
+            trade_months = __targetTradeMonth__(locationCode, trade_month_pool)
+            for tradeMonth in trade_months:
+                pool.append((locationCode, tradeMonth))
         print({'PoolLen': len(pool)})
-        # pp.pprint(pool)
         return pool
-
-    
-        # f = {
-        #     '법정동명': {'$regex': '서울.*강남구$'},
-        #     # 'dataName': dataName,
-        #     # 'totalCount': None,
-        #     # 'totalCount': {'$gt': 0},
-        # }
-        # return pd.DataFrame(data)
 
     def inspect(self):
         cols = ['법정동명', '지역코드', 'dataName', 'totalCount', '계약연월', 'numOfRows', 'pageNo', 'resultCode', 'resultMsg']
@@ -265,7 +296,7 @@ class CHECKLIST_RealEstate(database.Collection):
             # '법정동명': {'$regex': '서울'},
             # 'dataName': {'$ne': None},
             # 'dataName': None,
-            'dataName': 'getRTMSDataSvcAptRent',
+            # 'dataName': 'getRTMSDataSvcAptRent',
             # 'totalCount': None,
             # 'totalCount': {'$ne': None},
             'totalCount': {'$gt': 0},
@@ -448,10 +479,8 @@ def _manipulate01(model):
 
 
 ############################################################
-"""실제 데이타"""
+"""공공데이타"""
 ############################################################
-
-
 
 class RealEstateBase(database.Collection):
 
@@ -507,7 +536,39 @@ class RealEstateBase(database.Collection):
         df = self.load_frame(f, p, sort=[('계약연월',-1)])
         df = df.drop_duplicates(keep='first').reset_index(drop=True)
         return df 
+    """중복제거"""
+    def dedup_data(self):
+        f = {
+            # '지역코드': '11680',
+        }
+        cursor = self.find(f)
+        data = list(cursor)
+        print({'DataLen': len(data)})
+        df = pd.DataFrame(data).\
+            sort_values(['년', '월', '일'], ascending=False).\
+            reset_index(drop=True)
+        
+        cols = list(df.columns)
+        cols.remove('_id')
+        subset = cols
+        # subset = ['지역코드', '계약연월', '일련번호', '년', '월', '일', '아파트', '전용면적', '층', '거래금액']
+        print({'subset': subset})
 
+        net = df.drop_duplicates(subset=subset, keep='first').\
+                reset_index(drop=True)
+        # print(net)
+        print({'NetLen': len(net)})
+
+        TF = df.duplicated(subset=subset, keep='first')
+        dup = df[TF]
+        # print(dup)
+        print({'DupLen': len(dup)})
+    
+        ids = list(dup._id)
+        self.delete_many({'_id': {'$in': ids}})
+    
+        logger.info('중복제거완료')
+        return dup, net
 
 
 """아파트매매 실거래 상세 자료"""
@@ -567,40 +628,8 @@ class AptTradeRealContract(RealEstateBase):
         __uniqueValues__(df)
         
         return df
-    """중복제거"""
-    def dedup_data(self):
-        f = {'지역코드': '11680'}
-        cursor = self.find(f)
-        data = list(cursor)
-        print({'DataLen': len(data)})
-        df = pd.DataFrame(data).\
-            sort_values(['년', '월', '일'], ascending=False).\
-            reset_index(drop=True)
-        
-        cols = list(df.columns)
-        cols.remove('_id')
-        subset = cols
-        # subset = ['지역코드', '계약연월', '일련번호', '년', '월', '일', '아파트', '전용면적', '층', '거래금액']
-        print({'subset': subset})
-
-        _df = df.drop_duplicates(subset=subset, keep='first').\
-                reset_index(drop=True)
-        print(_df)
-        print({'NetLen': len(_df)})
-
-        TF = df.duplicated(subset=subset, keep='first')
-        dup = df[TF]
-        print(dup)
-        print({'DupLen': len(dup)})
-        return dup
     
-        ids = list(dup._id)
-        self.delete_many({'_id': {'$in': ids}})
     
-        logger.info('중복제거완료')
-    
-
-
 """국토교통부_아파트 전월세 자료"""
 class AptRent(RealEstateBase):
 
@@ -668,6 +697,9 @@ class VillaRent(RealEstateBase):
 
 
 
+############################################################
+"""한국은행 데이타"""
+############################################################
 
 """한국은행 OpenAPI 서비스 통계 목록"""
 class BOKStatisticTableList(database.Collection):
