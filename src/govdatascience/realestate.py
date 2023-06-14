@@ -33,41 +33,54 @@ from govdatascience.dataengine import datamodels, schmodels
 def collect_all_RealState():
     data_types = [
         '아파트매매 실거래',
-        '아파트 전월세 자료',
-        '연립다세대 매매 실거래자료',
+        '아파트 전월세',
+        '연립다세대 매매 실거래',
         '연립다세대 전월세'
     ]
     for data_type in data_types:
         collect_one_RealState(data_type)
 
 
+def _get_openapi_function(data_type):
+    _map = {
+        '아파트.*매매.*실거래': 'getRTMSDataSvcAptTradeDev',
+        '아파트.*전월세': 'getRTMSDataSvcAptRent',
+        '연립.*매매.*실거래': 'getRTMSDataSvcRHTrade',
+        '연립.*전월세': 'getRTMSDataSvcRHRent',
+        '아파트.*분양권.*전매': 'getRTMSDataSvcSilvTrade',
+    }
+    for pat, dataName in _map.items():
+        m = re.search(pat, data_type)
+        if m is None: pass 
+        else: 
+            return getattr(datagokr, dataName), dataName
+
+def _get_datamodel(data_type):
+    _map = {
+        '아파트.*매매.*실거래': datamodels.AptTradeRealContract,
+        '아파트.*전월세': datamodels.AptRent,
+        '연립.*매매.*실거래': datamodels.VillaTradeRealContract,
+        '연립.*전월세': datamodels.VillaRent,
+    }
+    for pat, model in _map.items():
+        m = re.search(pat, data_type)
+        if m is None: pass 
+        else: return model()
+
+
 @ftracer
 def collect_one_RealState(data_type):
-    sch = schmodels.RealState()
+    req_func, dataName = _get_openapi_function(data_type)
+    if req_func is None: raise 
+    print({'OpenAPIFunction': dataName})
 
-    if re.search('아파트.*매매.*실거래',  data_type) is not None:
-        model2 = datamodels.AptTradeRealContract()
-        dataName = 'getRTMSDataSvcAptTradeDev'
-    elif re.search('아파트.*전월세',  data_type) is not None:
-        model2 = datamodels.AptRent()
-        dataName = 'getRTMSDataSvcAptRent'
-    elif re.search('연립.*매매.*실거래',  data_type) is not None:
-        model2 = datamodels.VillaTradeRealContract()
-        dataName = 'getRTMSDataSvcRHTrade'
-    elif re.search('연립.*전월세',  data_type) is not None:
-        model2 = datamodels.VillaRent()
-        dataName = 'getRTMSDataSvcRHRent'
-    elif re.search('아파트.*분양권.*전매',  data_type) is not None:
-        model2 = datamodels.VillaRent()
-        dataName = 'getRTMSDataSvcSilvTrade'
-    else:
-        raise 
-    req_func = getattr(datagokr, dataName)
-
+    model1 = _get_datamodel(data_type)
+    if model1 is None: raise
+    print({'DataModel': model1})
 
     # 신청가능 트래픽 개발계정 : 1,000 / 운영계정 : 활용사례 등록시 신청하면 트래픽 증가 가능
-    model1 = datamodels.CHECKLIST_RealEstate()
-    target = model1.target_ReqPool(dataName)
+    model2 = datamodels.CHECKLIST_RealEstate()
+    target = model2.target_ReqPool(dataName)
 
     pretty_title(f'{data_type} 수집대상')
     print(pd.DataFrame(target))
@@ -81,9 +94,9 @@ def collect_one_RealState(data_type):
             if d['resultCode'] == '00': 
                 data = d.pop('data')
                 """수집결과 업데이트"""
-                model1.update_result(dataName, locationCode, tradeMonth, d)
+                model2.update_result(dataName, locationCode, tradeMonth, d)
                 """데이타 저장"""
-                model2.save_data(data, tradeMonth)
+                model1.save_data(data, tradeMonth)
                 return True 
             else: 
                 logger.warning(d)
