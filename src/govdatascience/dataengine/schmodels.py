@@ -235,16 +235,107 @@ class SchemaModel(database.Collection):
 
 
 
-class RealState(SchemaModel):
+class Field(object):
+
+    def __init__(self, name, dtype, role=None, desc=None, **kwargs):
+        self.name = name
+        self.dtype = dtype
+        self.role = role
+        self.desc = desc
+        for k, v in kwargs.items(): setattr(self, k, v)
+    @property
+    def dict(self):
+        d = self.__dict__.copy()
+        d['column'] = self.name
+        del d['name']
+        return d
+    def parse(self, value): 
+        if self.dtype == 'int':
+            return inumber.Percent(value, self.prec).value
+
+
+class SchemaModelV2(SchemaModel):
+
+    def __init__(self, modelName=None):
+        super().__init__(modelName)
+    def __build__(self, Fields):
+        self._columns = []
+        for field in Fields:
+            setattr(self, field.name, field)
+            self._columns.append(field.name)
+    def save_to_db(self):
+        self.drop()
+        for col in self._columns:
+            field = getattr(self, col)
+            d = field.dict
+            pp.pprint(d)
+            self.update_one(
+                {'column': field.name},
+                {'$set': d},
+                True
+            )
+        logger.info(['DB저장완료', self])
+    def save_to_csv(self):
+        cursor = self.find({}, {'_id':0})
+        df = pd.DataFrame(list(cursor))
+        print(df.fillna('_'))
+        os.makedirs(CONFIG.SCHEMA_FILE_PATH, exist_ok=True)
+        filepath = os.path.join(CONFIG.SCHEMA_FILE_PATH, f'{self.modelName}.csv')
+        df.to_csv(filepath, index=False)
+        logger.info(['CSV파일저장완료', filepath])
+
+
+
+
+class RealEstate(SchemaModelV2):
 
     def __init__(self): 
-        # self.거래금액 = IntegerType()
-        # self.건축년도 = IntegerType()
-        # self.거래유형 = StringType()
-        # self._columns = list(self.__dict__)
-        # print(self.__dict__)
-
         super().__init__()
+        self.build()
+    def build(self):
+        fields = [
+            Field('거래금액', 'int', desc='단위:만원', unit=pow(10,4)),
+            Field('보증금액', 'int'),
+            Field('월세금액', 'int'),
+            Field('종전계약보증금', 'int'),
+            Field('종전계약월세', 'int'),
+            Field('건축년도', 'int'),
+            Field('년', 'int'),
+            Field('월', 'int'),
+            Field('일', 'int'),
+            Field('층', 'int'),
+            Field('거래유형', 'str'),
+            Field('계약연월', 'str', desc='OpenAPI함수 입력값'),
+            Field('지역코드', 'str', desc='OpenAPI함수 입력값'),
+            Field('일련번호', 'str'),
+            Field('거래유형', 'str'),
+            Field('도로명', 'str'),
+            Field('도로명건물본번호코드', 'str'),
+            Field('도로명건물부번호코드', 'str'),
+            Field('도로명시군구코드', 'str'),
+            Field('도로명일련번호코드', 'str'),
+            Field('도로명지상지하코드', 'str'),
+            Field('도로명코드', 'str'),
+            Field('법정동', 'str'),
+            Field('법정동본번코드', 'str'),
+            Field('법정동부번코드', 'str'),
+            Field('법정동시군구코드', 'str'),
+            Field('법정동읍면동코드', 'str'),
+            Field('법정동지번코드', 'str'),
+            Field('아파트', 'str'),
+            Field('전용면적', 'str'),
+            Field('중개사소재지', 'str'),
+            Field('지번', 'str'),
+            Field('해제여부', 'str'),
+            Field('갱신요구권사용', 'str'),
+            Field('지역1', 'str'),
+            Field('지역2', 'str'),
+            Field('해제여부', 'str'),
+            Field('해제사유발생일', 'date'),
+            Field('계약일자', 'datetime'),
+        ]
+        self.__build__(fields)
+
     def __create__(self):
         # cols = ['거래금액', '거래유형', '건축년도', '년', '도로명', '도로명건물본번호코드', '도로명건물부번호코드', '도로명시군구코드', '도로명일련번호코드', '도로명지상지하코드', '도로명코드', '법정동', '법정동본번코드', '법정동부번코드', '법정동시군구코드', '법정동읍면동코드', '법정동지번코드', '아파트', '월', '일', '일련번호', '전용면적', '중개사소재지', '지번', '지역코드', '층', '해제사유발생일', '해제여부', '검색연월']
         # cols = list(set(cols))

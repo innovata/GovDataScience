@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json 
 import os 
+import sys 
 from xml.dom import minidom
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import ElementTree
@@ -8,6 +9,7 @@ from urllib.parse import urlparse
 from dataclasses import dataclass
 from time import sleep
 from datetime import datetime
+import subprocess
 
 
 import requests
@@ -21,6 +23,13 @@ from govdatascience.openapi import APIKey
 
 
 
+
+
+def DECODE_KEY():
+    try:
+        return APIKey['DATAGOKR_DECODE_KEY']
+    except Exception as e:
+        logger.error(e)
 
 
 def view_xml(text):
@@ -47,52 +56,49 @@ def _write_xmlFile(filename, xml_text):
 
 
 def _handle_response(response):
-    if response is None:
-        return None 
-    else: 
-        # pp.pprint(response.__dict__)
-        o = urlparse(response.url)
-        # print(o)
-        dataName = o.path.split('/')[-1]
-        d = {'dataName': dataName}
+    # pp.pprint(response.__dict__)
+    o = urlparse(response.url)
+    # print(o)
+    dataName = o.path.split('/')[-1]
+    d = {'dataName': dataName}
 
-        root = ET.fromstring(response.text)
-        resultCode = root.find('header/resultCode').text
-        resultMsg = root.find('header/resultMsg').text
+    root = ET.fromstring(response.text)
+    resultCode = root.find('header/resultCode').text
+    resultMsg = root.find('header/resultMsg').text
+    d.update({
+        'resultCode': resultCode,
+        'resultMsg': resultMsg,
+    })
+
+    xml_file = _write_xmlFile(dataName, response.text)
+    print({'xml_file': xml_file})
+
+    # 바디 메타정보 뽑아내기
+    if resultCode == '00':
         d.update({
-            'resultCode': resultCode,
-            'resultMsg': resultMsg,
-        })
+            'numOfRows': int(root.find('body/numOfRows').text),
+            'pageNo': int(root.find('body/pageNo').text),
+            'totalCount': int(root.find('body/totalCount').text),
+        })    
+    else:
+        logger.warning([dataName, resultMsg])
+    
+    # 바디 데이타 뽑아내기
+    try:
+        items = root.find('body/items')
+        ElementTree(items).write(xml_file, encoding='UTF-8')
+        df = pd.read_xml(xml_file)
+    except Exception as e:
+        logger.error([dataName, e])
+        d.update({'data': []})
+    else:
+        data = df.to_dict('records')
+        print(dataName, {'DataLen': len(data)})
+        d.update({'data': data})
+    
+    os.remove(xml_file)
 
-        xml_file = _write_xmlFile(dataName, response.text)
-        print({'xml_file': xml_file})
-
-        # 바디 메타정보 뽑아내기
-        if resultCode == '00':
-            d.update({
-                'numOfRows': int(root.find('body/numOfRows').text),
-                'pageNo': int(root.find('body/pageNo').text),
-                'totalCount': int(root.find('body/totalCount').text),
-            })    
-        else:
-            logger.warning([dataName, resultMsg])
-        
-        # 바디 데이타 뽑아내기
-        try:
-            items = root.find('body/items')
-            ElementTree(items).write(xml_file, encoding='UTF-8')
-            df = pd.read_xml(xml_file)
-        except Exception as e:
-            logger.error([dataName, e])
-            d.update({'data': []})
-        else:
-            data = df.to_dict('records')
-            print(dataName, {'DataLen': len(data)})
-            d.update({'data': data})
-        
-        os.remove(xml_file)
-
-        return d 
+    return d 
 
 
 def _inputTradeMonth(value):
@@ -102,14 +108,19 @@ def _inputTradeMonth(value):
         return value
 
 
+
 def __reqGet__(url, params):
+    params.update({'serviceKey': DECODE_KEY()})
     try:
         response = requests.get(url, params=params)
-    except Exception as e:
-        logger.error(e)
-    else:
+    except requests.ConnectionError as e:
+        logger.error([e, url, params])
+
+        filepath = os.path.realpath(os.environ['RUN_FILE_PATH'])
+        subprocess.run([sys.executable, filepath] + sys.argv[1:])
+    finally:
         return response
-    
+
 
 
 """국토교통부_아파트매매 실거래 상세 자료"""
@@ -117,7 +128,7 @@ def __reqGet__(url, params):
 def getRTMSDataSvcAptTradeDev(locationCode, tradeMonth=None, n_rows='1000'):
     url = 'http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTradeDev'
     tradeMonth = _inputTradeMonth(tradeMonth)
-    params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'pageNo' : '1', 'numOfRows' : n_rows, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
+    params ={'pageNo' : '1', 'numOfRows' : n_rows, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     res = __reqGet__(url, params)
     return _handle_response(res)
 
@@ -127,7 +138,7 @@ def getRTMSDataSvcAptTradeDev(locationCode, tradeMonth=None, n_rows='1000'):
 def getRTMSDataSvcAptRent(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptRent'
     tradeMonth = _inputTradeMonth(tradeMonth)
-    params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth}
+    params ={'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth}
     res = __reqGet__(url, params)
     return _handle_response(res)
 
@@ -137,7 +148,7 @@ def getRTMSDataSvcAptRent(locationCode, tradeMonth=None):
 def getRTMSDataSvcRHTrade(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHTrade'
     tradeMonth = _inputTradeMonth(tradeMonth)
-    params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
+    params ={'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     res = __reqGet__(url, params)
     return _handle_response(res)
 
@@ -147,7 +158,7 @@ def getRTMSDataSvcRHTrade(locationCode, tradeMonth=None):
 def getRTMSDataSvcRHRent(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHRent'
     tradeMonth = _inputTradeMonth(tradeMonth)
-    params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
+    params ={'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     res = __reqGet__(url, params)
     return _handle_response(res)
 
@@ -157,7 +168,7 @@ def getRTMSDataSvcRHRent(locationCode, tradeMonth=None):
 def getRTMSDataSvcSilvTrade(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSilvTrade'
     tradeMonth = _inputTradeMonth(tradeMonth)
-    params ={'serviceKey' : APIKey.DataGoKr.DecodingKey, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
+    params ={'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
     res = __reqGet__(url, params)
     return _handle_response(res)
 

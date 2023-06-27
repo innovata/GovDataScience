@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import os 
 from datetime import datetime, timedelta
-import itertools
+from time import sleep
+import subprocess
+import sys
 
 
 import pandas as pd
@@ -10,9 +12,17 @@ import pandas as pd
 from ipylib.idebug import *
 
 
+from govdatascience import configuration as CONF
 from govdatascience.dataengine import database, schmodels
 
 
+
+
+
+
+############################################################
+"""메타데이타"""
+############################################################
 
 """법정동코드목록"""
 class LocationCode(database.Collection):
@@ -401,83 +411,6 @@ class CHECKLIST_RealEstate(database.Collection):
 
 
 
-
-
-############################################################
-"""데이타 업데이터"""
-############################################################
-
-
-"""법정동명을 지역1/지역2로 나누기"""
-def assign_newColumns01(model):
-    f = {
-        '폐지여부': '존재',
-        '지역코드': {'$regex': '[1-9]{4}0'},
-    }
-    cursor = LocationCode().find(f)
-    data = list(cursor)
-    df = pd.DataFrame(data)
-    df = df.drop_duplicates(subset=['지역코드'], keep='first')
-    print(df.reset_index(drop=True))
-    data = df.to_dict('records')
-    # return 
-    for d in data:
-        try:
-            region1, region2 = d['법정동명'].split(' ')
-            region1 = region1.strip()
-            region2 = region2.strip()
-        except Exception:
-            print(d)
-            region1, region2 = d['법정동명'], None
-        finally:
-            locationCode = d['지역코드']
-            print('업데이트중...', [locationCode, region1, region2])
-            model.update_many(
-                {'지역코드': locationCode},
-                {'$set': {'지역1': region1, '지역2': region2}}
-            )
-
-    logger.info('신규컬럼생성01완료')
-
-
-@ctracer
-def assign_newColumns02(model):
-
-    """계약일자 컬럼추가"""
-    def __ContractDate__(d, _doc):
-        dt = datetime(d['년'], d['월'], d['일']).astimezone()
-        _doc.update({'계약일자': dt})
-        return _doc
-    """아파트ID 컬럼추가"""
-    def __AptId__(d, _doc):
-        _doc.update({'AptId': d['일련번호'] + '_' + str(d['전용면적'])})
-        return _doc 
-    
-    f = {'$or': [
-            {'계약일자': None},
-            {'AptId': None}
-    ]}
-    cursor = model.find(f)
-    doc = {}
-    for d in list(cursor):
-        doc = __ContractDate__(d, doc)
-        doc = __AptId__(d, doc)
-        # print(doc)
-        model.update_one(
-            {'_id': d['_id']},
-            {'$set': doc}
-        )
-    logger.info('신규컬럼생성02완료')
-
-
-@ctracer
-def _manipulate01(model):
-    model.update_many(
-        {},
-        {'$rename': {'검색연월': '계약연월'}}
-    )
-
-
 ############################################################
 """공공데이타"""
 ############################################################
@@ -486,6 +419,7 @@ class RealEstateBase(database.Collection):
 
     def __init__(self): super().__init__(self.__class__.__name__)
     def load_frame(self, f, p={'_id':0}, **kwargs):
+        print({'DocsLen': self.count_documents(filter={})})
         print({'필터': f})
         data = self.load(f, p, **kwargs)
         print({'DataLen': len(data)})
@@ -569,22 +503,29 @@ class RealEstateBase(database.Collection):
     
         logger.info('중복제거완료')
         return dup, net
+    def update_model_data(self):
+        # assign_newColumns01(self)
+        # assign_newColumns02(self)
+        print('Update model')
+        # for i in range(3):
+        #     logger.info(i)
+        #     sleep(1)
+    def inspect(self):
+        sch = schmodels.RealState()
+        cols = sch.columns + ['계약연월','계약일자','지역1','지역2']
+        database.print_colunqval(self, cols)
 
 
 """아파트매매 실거래 상세 자료"""
 class AptTradeRealContract(RealEstateBase):
 
     def __init__(self): super().__init__()
-    def inspect(self):
-        sch = schmodels.RealState()
-        cols = sch.columns + ['계약연월','계약일자','지역1','지역2']
-        database.print_colunqval(self, cols)
     def view(self):
         # _manipulate01(self)
-        assign_newColumns01(self)
-        assign_newColumns02(self)
+        # assign_newColumns01(self)
+        # assign_newColumns02(self)
 
-        o = LocationCode().select({'법정동명': {'$regex': '강남구'}})
+        o = LocationCode().select({'법정동명': {'$regex': '강남구'}}, type='dcls')
         f = {
             '지역코드': o.지역코드,
             # '지역1': '서울특별시',
@@ -605,24 +546,40 @@ class AptTradeRealContract(RealEstateBase):
 
         # 중복제거
         def __dedup__(df):
-            subset = ['지역코드']
-            return df.drop_duplicates(subset=subset, keep='first').\
-                    reset_index(drop=True)
+            try:
+                subset = ['지역코드']
+                return df.drop_duplicates(subset=subset, keep='first').\
+                        reset_index(drop=True)
+            except Exception as e:
+                logger.error(e)
+                return df 
         
         df = __dedup__(df)
         print({'FrameLen': len(df)})
         
         # 정렬
-        df = df.sort_values('계약일자').reset_index(drop=True)
+        def __sort__(df):
+            try:
+                return df.sort_values('계약일자').reset_index(drop=True)
+            except Exception as e:
+                logger.error(e)
+                return df
 
         def __groupby01__(df):
-            g = df.groupby('아파트').count()
-            print(g.sort_values('거래금액', ascending=False))
+            try:
+                g = df.groupby('아파트').count()
+                print(g.sort_values('거래금액', ascending=False))
+            except Exception as e:
+                logger.error(e)
+                return df 
 
         def __uniqueValues__(df):
-            for c in list(df.columns):
-                values = list(df[c].unique())
-                print(c, len(values), values)
+            try:
+                for c in list(df.columns):
+                    values = list(df[c].unique())
+                    print(c, len(values), values)
+            except Exception as e:
+                logger.error(e)
 
         # __groupby01__(df)
         __uniqueValues__(df)
@@ -637,15 +594,18 @@ class AptRent(RealEstateBase):
     def view(self):
         # assign_newColumns01(self)
         # assign_newColumns02(self)
-        _manipulate01(self)
+        # _manipulate01(self)
         # self.clean_values_by_dtypes()
+
+        # print({'DocsLen': self.count_documents(filter={})})
+        # return 
 
         f = {
             # '계약연월': None,
             # '아파트': '신답경남',
             # '지역코드': '11140',
-            '지역1': {'$regex': '서울'},
-            # '지역2': {'$regex': '강남'},
+            # '지역1': {'$regex': '서울'},
+            '지역2': {'$regex': '강남'},
             # '계약연월': None,
             # '계약연월': {'$ne': None},
             # '아파트': {'$regex': '현대2차'},
@@ -717,3 +677,137 @@ class BOKStatisticTableList(database.Collection):
         data = self.load(f, p)
         df = pd.DataFrame(data)
         return df 
+    
+
+
+
+
+MODEL_LIST = vars()
+
+
+
+
+############################################################
+"""데이타 업데이터"""
+############################################################
+
+
+"""법정동명을 지역1/지역2로 나누기"""
+def assign_newColumns01(model):
+    f = {
+        '폐지여부': '존재',
+        '지역코드': {'$regex': '[1-9]{4}0'},
+    }
+    cursor = LocationCode().find(f)
+    data = list(cursor)
+    df = pd.DataFrame(data)
+    df = df.drop_duplicates(subset=['지역코드'], keep='first')
+    print(df.reset_index(drop=True))
+    data = df.to_dict('records')
+    # return 
+    for d in data:
+        try:
+            region1, region2 = d['법정동명'].split(' ')
+            region1 = region1.strip()
+            region2 = region2.strip()
+        except Exception:
+            print(d)
+            region1, region2 = d['법정동명'], None
+        finally:
+            locationCode = d['지역코드']
+            logger.info(['업데이트중...', locationCode, region1, region2])
+            model.update_many(
+                {'지역코드': locationCode},
+                {'$set': {'지역1': region1, '지역2': region2}}
+            )
+
+    logger.info('신규컬럼생성01완료')
+
+
+def assign_newColumns02(model):
+
+    """계약일자 컬럼추가"""
+    def __ContractDate__(d, _doc):
+        dt = datetime(d['년'], d['월'], d['일']).astimezone()
+        _doc.update({'계약일자': dt})
+        return _doc
+    """아파트ID 컬럼추가"""
+    def __AptId__(d, _doc):
+        _doc.update({'AptId': d['일련번호'] + '_' + str(d['전용면적'])})
+        return _doc 
+    
+    f = {'$or': [
+            {'계약일자': None},
+            {'AptId': None}
+    ]}
+    cursor = model.find(f)
+    doc = {}
+    for d in list(cursor):
+        doc = __ContractDate__(d, doc)
+        doc = __AptId__(d, doc)
+        # print(doc)
+        model.update_one(
+            {'_id': d['_id']},
+            {'$set': doc}
+        )
+    logger.info('신규컬럼생성02완료')
+
+
+def _manipulate01(model):
+    model.update_many(
+        {},
+        {'$rename': {'검색연월': '계약연월'}}
+    )
+
+
+
+def update_model_data(model):
+    assign_newColumns01(model)
+    assign_newColumns02(model)
+    logger.info(['모델데이타업데이트종료', model])
+
+
+def multiprocessing_updateModelData():
+    filepath = os.path.join(CONF.PROJECT_PATH, 'src\govdatascience\dataengine\_exec_files\datamodels01.py')
+    filepath = os.path.realpath(filepath)
+
+    argv = sys.argv[1:]
+    argv.append('update_model_data')
+    models = 'AptTradeRealContract|AptRent|VillaTradeRealContract|VillaRent'
+    argv.append(models)
+
+    rv = subprocess.run([sys.executable, filepath] + argv)
+    logger.info(['멀티프로세싱 모델데이타업데이트종료', rv])
+
+
+
+def dedup_model_data(model):
+    model.dedup_data()
+    logger.info(['모델데이타중복제거완료', model])
+
+
+# 메모리큐 용량초과로 실패한다. 쓰지마라
+def multiprocessing_dedupModelData():
+    filepath = os.path.join(CONF.PROJECT_PATH, 'src\govdatascience\dataengine\_exec_files\datamodels01.py')
+    filepath = os.path.realpath(filepath)
+
+    argv = sys.argv[1:]
+    argv.append('dedup_model_data')
+    models = 'AptTradeRealContract|AptRent|VillaTradeRealContract|VillaRent'
+    argv.append(models)
+
+    rv = subprocess.run([sys.executable, filepath] + argv)
+    logger.info(['멀티프로세싱 모델데이타중복제거완료', rv])
+
+
+def sequencial_dedupModelData():
+    models = 'AptTradeRealContract|AptRent|VillaTradeRealContract|VillaRent'
+    models = models.split('|')
+    _len = len(models)
+    for i, model in enumerate(models):
+        logger.info([f'{i}/{_len}', model])
+        model = MODEL_LIST[model]()
+        model.dedup_data()
+
+    logger.info(['시퀀싱 모델데이타중복제거완료'])
+

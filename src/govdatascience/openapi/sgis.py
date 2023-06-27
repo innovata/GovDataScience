@@ -24,8 +24,8 @@ from govdatascience.openapi import APIKey
 def get_accessToken():
     url = 'https://sgisapi.kostat.go.kr/OpenAPI3/auth/authentication.json'
     params = {
-        'consumer_key': APIKey.SGIS.ConsumerKey,
-        'consumer_secret': APIKey.SGIS.ConsumerSecret,
+        'consumer_key': APIKey['SGIS_CONSUMER_KEY'],
+        'consumer_secret': APIKey['SGIS_CONSUMER_SECRET'],
     }
     response = requests.get(url, params=params)
     # print(response)

@@ -39,7 +39,12 @@ from govdatascience.openapi import APIKey
 에러-602 : 과도한 OpenAPI호출로 이용이 제한되었습니다. 잠시후 이용해주시기 바랍니다.
 """
 
-AUTH_KEY = APIKey.BOK.AuthKey
+
+def AUTH_KEY():
+    try:
+        return APIKey['BOK']
+    except Exception as e:
+        logger.error(e)
 
 
 
@@ -47,7 +52,7 @@ AUTH_KEY = APIKey.BOK.AuthKey
 def __req__(svcName, **kwargs):
     params = {
         '서비스명': svcName,
-        '인증키': AUTH_KEY,
+        '인증키': AUTH_KEY(),
         '요청유형': 'json',
         '언어구분': 'kr',
         '요청시작건수': '1',

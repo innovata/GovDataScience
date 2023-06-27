@@ -10,4 +10,5 @@ pymongo
 
 
 ipylib
+ipycrawl
 
