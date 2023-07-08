@@ -1,0 +1,9 @@
+column,desc,dtype,role
+dataName,,str,
+계약연월,YYYYMM 형태,str,
+지역코드,,str,
+resultCode,,str,
+resultMsg,,str,
+numOfRows,,int,
+pageNo,,int,
+totalCount,,int,

@@ -20,41 +20,6 @@ from govdatascience.dataengine.database import db
 
 
 
-class FieldType:
-
-    def __init__(self, **kwargs):
-        for k,v in kwargs.items(): setattr(self, k, v)
-
-
-
-"""일자, 일시, 시간 데이터타입 컬럼"""
-class DatetimeType(FieldType):
-
-    def __init__(self, **kwargs): super().__init__(**kwargs)
-    def parse(self, value):
-        v = idatetime.DatetimeParser(value)
-        if isinstance(v, datetime.datetime): return v
-        else: return value
-
-
-class PercentType(FieldType):
-
-    def __init__(self, prec=4, **kwargs): super().__init__(prec=prec, **kwargs)
-    def parse(self, value): return inumber.Percent(value, self.prec).value
-
-
-class IntegerType(FieldType):
-
-    def __init__(self, **kwargs): super().__init__(**kwargs)
-    def parse(self, value): return inumber.iNumber(value).value
-
-
-class StringType(FieldType):
-
-    def __init__(self, **kwargs): super().__init__(**kwargs)
-    def parse(self, value): return str(value)
-
-
 class SchemaModel(database.Collection):
     # column: 컬럼명
     # dtype: 데이터 타입
@@ -222,7 +187,7 @@ class SchemaModel(database.Collection):
                     if isinstance(v, datetime.datetime): d[c] = v
                     else: pass 
         return data
-    def view(self, f=None, p={'_id':0}, sort=[('dtype',1), ('column',1)], **kw):
+    def view(self, f=None, p={'_id':0}, sort=[('seq',1), ('dtype',1), ('column',1)], **kw):
         df = self.__view__(f, p, sort, **kw)
         return df.fillna('_')
     def __view__(self, f, p, sort, **kw):
@@ -232,7 +197,6 @@ class SchemaModel(database.Collection):
     def view01(self):
         self.delete_many({'column': None})
         return self.view()
-
 
 
 class Field(object):
@@ -249,9 +213,7 @@ class Field(object):
         d['column'] = self.name
         del d['name']
         return d
-    def parse(self, value): 
-        if self.dtype == 'int':
-            return inumber.Percent(value, self.prec).value
+    def parse(self, value): return iparser.DtypeParser(value, self.dtype)
 
 
 class SchemaModelV2(SchemaModel):
@@ -265,9 +227,10 @@ class SchemaModelV2(SchemaModel):
             self._columns.append(field.name)
     def save_to_db(self):
         self.drop()
-        for col in self._columns:
+        for i, col in enumerate(self._columns):
             field = getattr(self, col)
             d = field.dict
+            d.update({'seq': i})
             pp.pprint(d)
             self.update_one(
                 {'column': field.name},
@@ -285,8 +248,26 @@ class SchemaModelV2(SchemaModel):
         logger.info(['CSV파일저장완료', filepath])
 
 
+class CHECKLIST_RealEstate(SchemaModelV2):
+
+    def __init__(self): 
+        super().__init__()
+        self.build()
+    def build(self):
+        fields = [
+            Field('dataName', 'str', desc='openapi.datgokr 함수명'),
+            Field('계약연월', 'str', desc='YYYYMM 형태'),
+            Field('지역코드', 'str', desc='LocationCode테이블 지역코드 컬럼'),
+            Field('resultCode', 'str'),
+            Field('resultMsg', 'str'),
+            Field('numOfRows', 'int'),
+            Field('pageNo', 'int'),
+            Field('totalCount', 'int'),
+        ]
+        self.__build__(fields)
 
 
+"""아파트매매/전세, 빌라매매/전세 데이타에 대한 스키마"""
 class RealEstate(SchemaModelV2):
 
     def __init__(self): 
@@ -336,40 +317,5 @@ class RealEstate(SchemaModelV2):
         ]
         self.__build__(fields)
 
-    def __create__(self):
-        # cols = ['거래금액', '거래유형', '건축년도', '년', '도로명', '도로명건물본번호코드', '도로명건물부번호코드', '도로명시군구코드', '도로명일련번호코드', '도로명지상지하코드', '도로명코드', '법정동', '법정동본번코드', '법정동부번코드', '법정동시군구코드', '법정동읍면동코드', '법정동지번코드', '아파트', '월', '일', '일련번호', '전용면적', '중개사소재지', '지번', '지역코드', '층', '해제사유발생일', '해제여부', '검색연월']
-        # cols = list(set(cols))
-        # data = []
-        # for c in cols:
-        #     data.append((c, 'str', None, None))
-        
-        # self.drop()
-        # for col, dtype, role, desc in data:
-        #     self.insert_one({
-        #         'column': col,
-        #         'dtype': dtype,
-        #         'role': role,
-        #         'desc': desc,
-        #     })
-
-        # self.update_many(
-        #     {'column': {'$regex': '^[년월일층]$|년도$|거래금액'}},
-        #     {'$set': {'dtype': 'int'}}
-        # )
-
-        # self.update_many(
-        #     {'column': {'$regex': '발생일$'}},
-        #     {'$set': {'dtype': 'date'}}
-        # )
-
-        # self.update_many(
-        #     {'column': {'$regex': '검색연월|지역코드'}},
-        #     {'$set': {'desc': 'OpenAPI함수 입력값'}}
-        # )
-
-        self.update_many(
-            {'column': {'$regex': '^거래금액$'}},
-            {'$set': {'desc': '단위: 만원', 'unit': pow(10,4)}}
-        )
 
 

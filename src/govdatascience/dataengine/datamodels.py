@@ -96,37 +96,36 @@ class LocationCode(database.Collection):
 """체크리스트"""
 ############################################################
 
-"""지역코드 기반 데이타수집 체크리스트 테이블 기본데이타 생성"""
-def __CREATE_CHECKLIST_TYPE01__(model1):
-    """수집할 지역 정의"""
-    f = {
-        '폐지여부': '존재',
-        # '법정동명': {'$regex': '구$|시$'},
-        '법정동명': {'$regex': '서울.+구$|경기.+시$|인천.+구$|광역시.+구$'},
-        '지역코드': {'$regex': '[1-9]{4}0'},
-    }
-    model2 = LocationCode()
-    p = {c:1 for c in ['법정동명', '지역코드']}
-    p.update({'_id':0})
-    data = model2.load(f, p)
-
-    """수집할 계약연월 정의"""
-    dts = pd.bdate_range(start='1990/1', end='2023/6', freq='M')
-    dts = sorted(dts, reverse=True)
-    tradeMonths = [t.strftime("%Y%m") for t in dts]
-    
-    model1.drop()
-    for tradeMonth in tradeMonths:
-        df = pd.DataFrame(data)
-        df['계약연월'] = tradeMonth
-        model1.insert_many(df.to_dict('records'))
-
 
 """국토교통부 부동산 관련 OpenAPI 데이타 수집이력"""
 class CHECKLIST_RealEstate(database.Collection):
 
     def __init__(self): super().__init__(self.__class__.__name__)
-    def __create__(self): __CREATE_CHECKLIST_TYPE01__(self)
+    """지역코드 기반 데이타수집 체크리스트 테이블 기본데이타 생성"""
+    def __create__(self): 
+        """수집할 지역 정의"""
+        f = {
+            '폐지여부': '존재',
+            # '법정동명': {'$regex': '구$|시$'},
+            '법정동명': {'$regex': '서울.+구$|경기.+시$|인천.+구$|광역시.+구$'},
+            '지역코드': {'$regex': '[1-9]{4}0'},
+        }
+        p = {c:1 for c in ['법정동명', '지역코드']}
+        p.update({'_id':0})
+        model = LocationCode()
+        data = model.load(f, p)
+
+        """수집할 계약연월 정의"""
+        dts = pd.bdate_range(start='1990/1', end='2023/6', freq='M')
+        dts = sorted(dts, reverse=True)
+        tradeMonths = [t.strftime("%Y%m") for t in dts]
+        
+        self.drop()
+        for tradeMonth in tradeMonths:
+            df = pd.DataFrame(data)
+            df['계약연월'] = tradeMonth
+            self.insert_many(df.to_dict('records'))
+
     def upsert_doc(self, locationCode, tradeMonth, dataName, doc):
         f = {
             '지역코드': locationCode, 
@@ -210,7 +209,7 @@ class CHECKLIST_RealEstate(database.Collection):
 
     """OpenAPI신규수집대상"""
     def target_ReqPool(self, dataName):
-
+        
         """강남구 데이타의 계약연월리스트가 기준"""
         def has_stnd_data():
             f = {
@@ -441,7 +440,7 @@ class RealEstateBase(database.Collection):
             print(df)
             _data = df.to_dict('records')
             
-            sch = schmodels.RealState()
+            sch = schmodels.RealEstate()
             _data = sch.parse_data(_data)
 
             self.insert_many(_data)
@@ -449,7 +448,7 @@ class RealEstateBase(database.Collection):
     def clean_values_by_dtypes(self):
         cursor = self.find()
         data = list(cursor)
-        sch = schmodels.RealState()
+        sch = schmodels.RealEstate()
         try:
             data = sch.parse_data(data)
         except Exception:
@@ -511,7 +510,7 @@ class RealEstateBase(database.Collection):
         #     logger.info(i)
         #     sleep(1)
     def inspect(self):
-        sch = schmodels.RealState()
+        sch = schmodels.RealEstate()
         cols = sch.columns + ['계약연월','계약일자','지역1','지역2']
         database.print_colunqval(self, cols)
 
@@ -537,7 +536,7 @@ class AptTradeRealContract(RealEstateBase):
             # '일련번호': '11560-75',
             # '거래유형': '직거래',
         }
-        sch = schmodels.RealState()
+        sch = schmodels.RealEstate()
         cols = sch.get_cols(column='코드$|번호$|^해제')
         cols.remove('일련번호')
         
@@ -645,7 +644,7 @@ class VillaRent(RealEstateBase):
         f = {
             # '계약연월': None,
         }
-        sch = schmodels.RealState()
+        sch = schmodels.RealEstate()
         cols = sch.get_cols(column='코드$|번호$')
         pp.pprint(cols)
         p = {c:0 for c in cols}
@@ -682,7 +681,7 @@ class BOKStatisticTableList(database.Collection):
 
 
 
-MODEL_LIST = vars()
+MODELS_MAP = vars()
 
 
 
