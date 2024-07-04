@@ -1,6 +1,5 @@
-pip
-pytest
 ipykernel
+pytest
 
 
 requests

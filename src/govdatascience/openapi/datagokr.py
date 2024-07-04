@@ -23,13 +23,30 @@ from govdatascience.openapi import APIKey
 
 
 
+def get_apikey():
 
-
-def DECODE_KEY():
+    # 1차 시도: 개인API인증키를 직접 입력할 경우
     try:
-        return APIKey['DATAGOKR_DECODE_KEY']
+        return os.environ['DATAGOKR_DECODE_KEY']
     except Exception as e:
         logger.error(e)
+        # 2차 시도: 개인API인증키가 있는 파일을 읽어들이는 경우
+        try:
+            filepath = os.environ['DATAGOKR_DECODE_KEY_FILEPATH']
+        except Exception as e:
+            logger.error(e)
+            raise
+        else:
+            try:
+                with open(filepath, "r") as f:
+                    text = f.read()
+                    f.close()
+                    d = json.loads(text)
+                return d['Decoding']
+            except Exception as e:
+                logger.error(e)
+                raise
+
 
 
 def view_xml(text):
@@ -110,7 +127,7 @@ def _inputTradeMonth(value):
 
 
 def __reqGet__(url, params):
-    params.update({'serviceKey': DECODE_KEY()})
+    params.update({'serviceKey': get_apikey()})
     try:
         response = requests.get(url, params=params)
     except requests.ConnectionError as e:

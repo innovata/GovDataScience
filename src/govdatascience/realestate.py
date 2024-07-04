@@ -49,7 +49,8 @@ def _get_openapi_function(data_type):
     }
     for pat, dataName in _map.items():
         m = re.search(pat, data_type)
-        if m is None: pass 
+        if m is None: 
+            pass 
         else: 
             return getattr(datagokr, dataName), dataName
 
