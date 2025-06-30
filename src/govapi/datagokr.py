@@ -3,7 +3,6 @@
 
 
 
-import json 
 import os 
 import sys 
 from xml.dom import minidom
@@ -14,6 +13,7 @@ from dataclasses import dataclass
 from time import sleep
 from datetime import datetime
 import subprocess
+import re
 
 
 import requests
@@ -21,36 +21,29 @@ import pandas as pd
 
 
 from ipylib.idebug import *
+from ipylib import ifile 
 
 
-from govdatascience.openapi import APIKey
 
 
 
-def get_apikey():
+class DataGoKrAPIKey:
 
-    # 1차 시도: 개인API인증키를 직접 입력할 경우
-    try:
-        return os.environ['DATAGOKR_DECODE_KEY']
-    except Exception as e:
-        logger.error(e)
-        # 2차 시도: 개인API인증키가 있는 파일을 읽어들이는 경우
-        try:
-            filepath = os.environ['DATAGOKR_DECODE_KEY_FILEPATH']
-        except Exception as e:
-            logger.error(e)
-            raise
-        else:
-            try:
-                with open(filepath, "r") as f:
-                    text = f.read()
-                    f.close()
-                    d = json.loads(text)
-                return d['Decoding']
-            except Exception as e:
-                logger.error(e)
-                raise
+    def __init__(self):
+        self.cred_path = os.environ['DATA_GO_KR_CREDENTIAL_PATH']
+        self._dic = ifile.read_jsonfile(self.cred_path)
 
+    @property
+    def decode_key(self):
+        if self._dic:
+            return self._dic['Decoding']
+        
+    @property
+    def encode_key(self):
+        if self._dic:
+            return self._dic['Encoding']
+    
+APIKey = DataGoKrAPIKey()
 
 
 def view_xml(text):
@@ -130,8 +123,8 @@ def _inputTradeMonth(value):
 
 
 
-def __reqGet__(url, params):
-    params.update({'serviceKey': get_apikey()})
+def __req_get__(url, params):
+    params.update({'serviceKey': APIKey.decode_key})
     try:
         response = requests.get(url, params=params)
     except requests.ConnectionError as e:
@@ -144,52 +137,134 @@ def __reqGet__(url, params):
 
 
 
-"""국토교통부_아파트매매 실거래 상세 자료"""
+
+REQUEST_DATA = [
+    {
+        "api_name": "국토교통부_아파트매매 실거래 상세 자료",
+        "url": "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTradeDev",
+        "func_name": "getRTMSDataSvcAptTradeDev",
+        "params": {
+            'pageNo': '1',
+            'numOfRows': 1000,
+            'LAWD_CD': locationCode,
+            'DEAL_YMD': tradeMonth
+        }
+    },
+    {
+        "api_name": "국토교통부_아파트 전월세 자료",
+        "url": "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptRent",
+        "params": {
+            'pageNo': '1',
+            'numOfRows': n_rows,
+            'LAWD_CD': locationCode,
+            'DEAL_YMD': tradeMonth
+        }
+    },
+    {
+        "api_name": "국토교통부_연립다세대 매매 실거래자료",
+        "url": "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHTrade",
+        "params": {
+            'pageNo': '1',
+            'numOfRows': n_rows,
+            'LAWD_CD': locationCode,
+            'DEAL_YMD': tradeMonth
+        }
+    },
+    {
+        "api_name": "국토교통부_연립다세대 전월세 자료",
+        "url": "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHRent",
+        "params": {
+            'pageNo': '1',
+            'numOfRows': n_rows,
+            'LAWD_CD': locationCode,
+            'DEAL_YMD': tradeMonth
+        }
+    },
+    {
+        "api_name": "국토교통부_아파트 분양권전매 신고 자료",
+        "url": "http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSilvTrade",
+        "params": {
+            'pageNo': '1',
+            'numOfRows': n_rows,
+            'LAWD_CD': locationCode,
+            'DEAL_YMD': tradeMonth
+        }
+    }
+]
+
+
+def find_api(api_name):
+    for d in REQUEST_DATA:
+        if re.search(api_name, d['api_name']):
+            return d 
+
+
+@ftracer
+def get_data(
+    api_name:str,
+    locationCode:str, 
+    tradeMonth:str=None, 
+    n_rows:int=1000
+):
+    d = find_api(api_name)
+    if d:
+        params = d['params']
+        params.update({
+            "numOfRows": n_rows,
+            "LAWD_CD": locationCode,
+            "DEAL_YMD": _inputTradeMonth(tradeMonth),
+        })
+        res = __req_get__(url=d['url'], params=params)
+        return _handle_response(res)
+
+
+
+# 국토교통부_아파트매매 실거래 상세 자료
 @ftracer
 def getRTMSDataSvcAptTradeDev(locationCode, tradeMonth=None, n_rows='1000'):
     url = 'http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTradeDev'
     tradeMonth = _inputTradeMonth(tradeMonth)
     params ={'pageNo' : '1', 'numOfRows' : n_rows, 'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
-    res = __reqGet__(url, params)
+    res = __req_get__(url, params)
     return _handle_response(res)
 
 
-"""국토교통부_아파트 전월세 자료"""
+# 국토교통부_아파트 전월세 자료
 # @ftracer
 def getRTMSDataSvcAptRent(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptRent'
     tradeMonth = _inputTradeMonth(tradeMonth)
-    params ={'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth}
-    res = __reqGet__(url, params)
+    params = {'LAWD_CD': locationCode, 'DEAL_YMD': tradeMonth}
+    res = __req_get__(url, params)
     return _handle_response(res)
 
 
-"""국토교통부_연립다세대 매매 실거래자료"""
+# 국토교통부_연립다세대 매매 실거래자료
 @ftracer
 def getRTMSDataSvcRHTrade(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHTrade'
     tradeMonth = _inputTradeMonth(tradeMonth)
-    params ={'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
-    res = __reqGet__(url, params)
+    params = {'LAWD_CD': locationCode, 'DEAL_YMD': tradeMonth}
+    res = __req_get__(url, params)
     return _handle_response(res)
 
 
-"""국토교통부_연립다세대 전월세 자료"""
+# 국토교통부_연립다세대 전월세 자료
 @ftracer
 def getRTMSDataSvcRHRent(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcRHRent'
     tradeMonth = _inputTradeMonth(tradeMonth)
-    params ={'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
-    res = __reqGet__(url, params)
+    params = {'LAWD_CD': locationCode, 'DEAL_YMD': tradeMonth}
+    res = __req_get__(url, params)
     return _handle_response(res)
 
 
-"""국토교통부_아파트 분양권전매 신고 자료"""
+# 국토교통부_아파트 분양권전매 신고 자료
 @ftracer
 def getRTMSDataSvcSilvTrade(locationCode, tradeMonth=None):
     url = 'http://openapi.molit.go.kr/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcSilvTrade'
     tradeMonth = _inputTradeMonth(tradeMonth)
-    params ={'LAWD_CD' : locationCode, 'DEAL_YMD' : tradeMonth }
-    res = __reqGet__(url, params)
+    params = {'LAWD_CD': locationCode, 'DEAL_YMD': tradeMonth}
+    res = __req_get__(url, params)
     return _handle_response(res)
 
